@@ -4,6 +4,28 @@
 
 A small macOS menu bar app that switches keyboard layouts with **Ctrl + Shift** or a shortcut of your choice. It runs in the background and can be built without the full Xcode app.
 
+## Install with Homebrew
+
+With [Homebrew](https://brew.sh/) installed, run:
+
+```sh
+brew tap lukdut/layoutswitch https://github.com/lukdut/LayoutSwitch.git
+brew install --cask lukdut/layoutswitch/layoutswitch
+```
+
+This repository also serves as the Homebrew tap. Keep the explicit URL in the first command. The cask installs the published **Apple Silicon (arm64)** app for **macOS 13 or later** into `/Applications` and verifies its SHA-256 checksum.
+
+Homebrew installs the same ad hoc signed release. You may still need to allow its first launch in **System Settings → Privacy & Security → Open Anyway**, then grant **Input Monitoring**. The app is not notarized by Apple.
+
+If you already installed LayoutSwitch manually, quit it and move the old `LayoutSwitch.app` out of `/Applications` before installing with Homebrew. Your preferences are kept separately.
+
+To update after a new version is added to the cask:
+
+```sh
+brew update
+brew upgrade --cask lukdut/layoutswitch/layoutswitch
+```
+
 ## Download
 
 Download [LayoutSwitch 1.0.0 for Apple Silicon](https://github.com/lukdut/LayoutSwitch/releases/download/v1.0.0/LayoutSwitch-1.0.0-macos-arm64.zip) from the [release page](https://github.com/lukdut/LayoutSwitch/releases/tag/v1.0.0), extract the archive, and move `LayoutSwitch.app` to `/Applications`. Requires macOS 13 or later. The app interface in version 1.0.0 is in Russian.
@@ -96,12 +118,15 @@ Diagnostics print JSON with the process's Input Monitoring permission, Secure In
 
 Build caches stay in `.build`. The `scripts/swift.sh` wrapper disables SwiftPM's nested sandbox so builds work in restricted development environments. The package has no external dependencies, plugins, or network requests.
 
+For each release, update `version` and `sha256` in `Casks/layoutswitch.rb` to match the published archive. Homebrew uses this version for upgrades.
+
 ### Project structure
 
 ```text
 Sources/ShortcutCore/      shortcut recognition and recording, input source cycling
 Sources/LayoutSwitch/     CGEventTap, TIS, preferences, SwiftUI, and the menu bar app
 Tests/ShortcutCoreTests/   tests without global input or system permissions
+Casks/layoutswitch.rb     Homebrew installation from GitHub Releases
 Resources/Info.plist       app bundle configuration
 scripts/                  build scripts and AppKit icon generation
 dist/LayoutSwitch.app     build output (not tracked in Git)
@@ -128,5 +153,15 @@ The app does not extract typed text from keyboard events, log keystrokes, or sen
 Automated tests cover logic without generating global events. Permissions, hardware event delivery, IME behavior, and login need to be verified on the Mac where the app will run.
 
 ## Uninstall
+
+For a Homebrew installation, first disable launch at login in the app, then run:
+
+```sh
+brew uninstall --cask lukdut/layoutswitch/layoutswitch
+```
+
+This keeps your preferences. To remove preferences too, use `brew uninstall --cask --zap lukdut/layoutswitch/layoutswitch` instead. If you no longer need the tap, remove it with `brew untap lukdut/layoutswitch` after uninstalling the app.
+
+For a manual installation:
 
 Disable launch at login in the app's settings, choose **Quit LayoutSwitch** (`Завершить LayoutSwitch`), and delete the `.app`. If needed, remove LayoutSwitch from the Input Monitoring list in System Settings.

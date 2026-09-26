@@ -4,6 +4,28 @@
 
 Небольшое приложение для macOS, которое переключает раскладку по **Ctrl + Shift** или вашему сочетанию. Живёт в строке меню, работает в фоне и не требует Xcode для сборки.
 
+## Установка через Homebrew
+
+Если [Homebrew](https://brew.sh/) уже установлен, выполните:
+
+```sh
+brew tap lukdut/layoutswitch https://github.com/lukdut/LayoutSwitch.git
+brew install --cask lukdut/layoutswitch/layoutswitch
+```
+
+Этот репозиторий также служит Homebrew tap. В первой команде нужен полный URL. Cask устанавливает опубликованную сборку для **Apple Silicon (arm64)** и **macOS 13 или новее** в `/Applications` и проверяет SHA-256 архива.
+
+Homebrew устанавливает тот же релиз с локальной подписью. При первом запуске может потребоваться **«Всё равно открыть»** в разделе **Системные настройки → Конфиденциальность и безопасность**, а затем разрешение на **Мониторинг ввода**. Нотарификации Apple у приложения пока нет.
+
+Если LayoutSwitch уже установлен вручную, завершите приложение и перенесите старый `LayoutSwitch.app` из «Программ» перед установкой через Homebrew. Настройки приложения хранятся отдельно и сохранятся.
+
+Обновление после добавления новой версии в cask:
+
+```sh
+brew update
+brew upgrade --cask lukdut/layoutswitch/layoutswitch
+```
+
 ## Установка готового приложения
 
 Скачайте [LayoutSwitch 1.0.0 для Apple Silicon](https://github.com/lukdut/LayoutSwitch/releases/download/v1.0.0/LayoutSwitch-1.0.0-macos-arm64.zip) со [страницы релиза](https://github.com/lukdut/LayoutSwitch/releases/tag/v1.0.0), распакуйте архив и перенесите `LayoutSwitch.app` в `/Applications` («Программы»). Нужна macOS 13 или новее. Интерфейс приложения в версии 1.0.0 — на русском языке.
@@ -96,12 +118,15 @@ dist/LayoutSwitch.app/Contents/MacOS/LayoutSwitch --diagnose
 
 Все кэши сборки находятся в `.build`. Обёртка `scripts/swift.sh` отключает вложенную песочницу SwiftPM для работы из ограниченных сред разработки. В пакете нет внешних зависимостей, плагинов и сетевых запросов.
 
+При каждом релизе обновляйте `version` и `sha256` в `Casks/layoutswitch.rb` по опубликованному архиву. Homebrew использует эту версию для обновлений.
+
 ### Устройство
 
 ```text
 Sources/ShortcutCore/       распознавание и запись сочетаний, выбор следующего источника
 Sources/LayoutSwitch/      CGEventTap, TIS, настройки, SwiftUI и приложение в строке меню
 Tests/ShortcutCoreTests/   тесты без глобального ввода и системных разрешений
+Casks/layoutswitch.rb     установка через Homebrew из GitHub Releases
 Resources/Info.plist       настройки .app
 scripts/                  сборка и генерация иконки через AppKit
 dist/LayoutSwitch.app     результат сборки (не включается в git)
@@ -128,5 +153,15 @@ dist/LayoutSwitch.app     результат сборки (не включает
 Тесты покрывают логику без генерации глобальных событий. Разрешения, реальную доставку аппаратных событий, особенности IME и вход в систему нужно проверять на используемом Mac.
 
 ## Удаление
+
+Если приложение установлено через Homebrew, сначала отключите автозапуск в настройках приложения, затем выполните:
+
+```sh
+brew uninstall --cask lukdut/layoutswitch/layoutswitch
+```
+
+Настройки сохранятся. Чтобы удалить и настройки, используйте вместо этой команды `brew uninstall --cask --zap lukdut/layoutswitch/layoutswitch`. После удаления приложения ненужный tap можно отключить командой `brew untap lukdut/layoutswitch`.
+
+При ручной установке:
 
 Отключите автозапуск в настройках приложения, выберите «Завершить LayoutSwitch» и удалите `.app`. При необходимости удалите LayoutSwitch из списка «Мониторинг ввода» в системных настройках.
