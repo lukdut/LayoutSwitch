@@ -1,116 +1,132 @@
 # LayoutSwitch
 
-Небольшое приложение для macOS, которое переключает раскладку по **Ctrl + Shift** или вашему сочетанию. Живёт в строке меню, работает в фоне и не требует Xcode для сборки.
+**English** | [Русский](README.ru.md)
 
-## Запуск
+A small macOS menu bar app that switches keyboard layouts with **Ctrl + Shift** or a shortcut of your choice. It runs in the background and can be built without the full Xcode app.
 
-Требования: macOS 13 или новее для приложения и Swift 6.0 или новее для сборки и тестов (Xcode 16+ / совместимые Command Line Tools). Если инструментов нет, установите их командой `xcode-select --install`.
+## Download
 
-В директории `LayoutSwitch` выполните:
+Download [LayoutSwitch 1.0.0 for Apple Silicon](https://github.com/lukdut/LayoutSwitch/releases/download/v1.0.0/LayoutSwitch-1.0.0-macos-arm64.zip) from the [release page](https://github.com/lukdut/LayoutSwitch/releases/tag/v1.0.0), extract the archive, and move `LayoutSwitch.app` to `/Applications`. Requires macOS 13 or later. The app interface in version 1.0.0 is in Russian.
+
+The prebuilt app is for **Apple Silicon (arm64)**. On an Intel Mac, build from source using the instructions below. The release also includes `SHA256SUMS.txt` to verify the archive:
+
+```sh
+shasum -a 256 -c SHA256SUMS.txt
+```
+
+Run this command in the directory containing both downloaded files.
+
+The app is ad hoc signed and is not notarized by Apple. If macOS blocks the first launch, follow [Apple's instructions for opening apps](https://support.apple.com/en-us/102445) only if you trust the download. After opening the app, grant Input Monitoring access as described below.
+
+## Build from source
+
+Requirements: macOS 13 or later to run the app, and Swift 6.0 or later to build and test it (Xcode 16+ or compatible Command Line Tools). If the tools are missing, install them with `xcode-select --install`.
+
+From the `LayoutSwitch` directory, run:
 
 ```sh
 ./scripts/build.sh
 open dist/LayoutSwitch.app
 ```
 
-Готовое приложение находится в `dist/LayoutSwitch.app`. Для постоянного использования сначала перенесите его в `/Applications` («Программы»), затем открывайте именно эту копию. Сборка создаётся для архитектуры текущего Mac. Зависимостей из интернета нет.
+The finished app is at `dist/LayoutSwitch.app`. For everyday use, move it to `/Applications` first and launch that copy. The build targets the architecture of the current Mac. No dependencies are downloaded from the internet.
 
-При первом запуске:
+## First launch
 
-1. Нажмите **«Запросить доступ»** в окне настроек.
-2. В macOS откройте **Системные настройки → Конфиденциальность и безопасность → Мониторинг ввода** и включите **LayoutSwitch**. Кнопка **«Открыть настройки macOS»** ведёт в этот раздел. Если приложения нет в списке, добавьте `.app` кнопкой «+».
-3. Если macOS предложит завершить приложение, завершите и откройте его снова. При необходимости используйте **«Повторить подключение»**.
-4. Убедитесь, что выбраны хотя бы две раскладки. Нажмите и полностью отпустите **Ctrl + Shift** в любом обычном текстовом поле.
+1. Click **Request access** (`Запросить доступ`) in the settings window.
+2. Open **System Settings → Privacy & Security → Input Monitoring** and enable **LayoutSwitch**. The **Open macOS settings** (`Открыть настройки macOS`) button takes you there. If the app is missing from the list, add the `.app` using the “+” button.
+3. If macOS asks you to quit the app, quit and reopen it. Use **Retry connection** (`Повторить подключение`) if needed.
+4. Make sure at least two input sources are selected. Press and fully release **Ctrl + Shift** in a regular text field.
 
-Разрешение выдаётся пользователем в системных настройках. Приложение использует пассивное наблюдение и не запрашивает «Универсальный доступ».
+The user grants permission in System Settings. The app listens passively and does not request Accessibility access.
 
-## Возможности
+## Features
 
-- **Своё сочетание.** Нажмите «Записать…», зажмите сочетание и отпустите все клавиши. Поддерживаются два–четыре модификатора из Ctrl, Shift, Option, Command либо один–четыре модификатора с одной обычной клавишей. Esc отменяет запись. Потеря фокуса окна также отменяет запись.
-- **Любая сторона клавиатуры.** Левые и правые Ctrl/Shift/Option/Command равнозначны; можно смешивать стороны.
-- **Выбор раскладок.** Переключение по кругу между отмеченными источниками ввода. Цифры справа показывают порядок. «Все раскладки» также автоматически включает новые источники, добавленные в macOS.
-- **Пауза.** В меню приложения или переключателем в настройках. Ручная команда «Следующая раскладка» остаётся доступна на паузе.
-- **Автозапуск.** Включается отдельно через «Запускать при входе в macOS». Состояние считывается из системы; при необходимости приложение предлагает открыть системное подтверждение.
-- **Текущая раскладка.** Отображается в строке меню и обновляется при переключении средствами macOS.
-- **Сохранение настроек.** Сочетание, выбранные раскладки и пауза сохраняются в UserDefaults приложения (`local.masos.LayoutSwitch`).
+- **Custom shortcuts.** Click **Record…** (`Записать…`), hold your shortcut, and release all keys. Use two to four modifiers from Ctrl, Shift, Option, and Command, or one to four modifiers with one regular key. Esc cancels recording. Moving focus away from the window also cancels it.
+- **Either side of the keyboard.** Left and right Ctrl/Shift/Option/Command keys are equivalent and can be mixed.
+- **Input source selection.** Cycle through checked input sources. The numbers on the right show their order. **All layouts** (`Все раскладки`) also includes new sources added in macOS automatically.
+- **Pause.** Use the menu bar menu or the switch in settings. The manual **Next layout** (`Следующая раскладка`) command remains available while paused.
+- **Launch at login.** Enable **Launch at macOS login** (`Запускать при входе в macOS`) separately. The app reads its actual status from the system and offers to open system approval settings when needed.
+- **Current layout.** Shown in the menu bar and updated when you switch input sources through macOS.
+- **Saved settings.** The shortcut, selected sources, and pause state are stored in the app's UserDefaults (`local.masos.LayoutSwitch`).
 
-## Правила срабатывания
+## Shortcut behavior
 
-| Действие | Результат |
+| Action | Result |
 | --- | --- |
-| Ctrl, затем Shift; отпустить обе клавиши | Одно переключение после последнего отпускания |
-| Shift, затем Ctrl; отпустить в любом порядке | То же самое |
-| Удерживать Ctrl + Shift | Переключения до отпускания нет |
-| Ctrl + Shift + буква | Переключения нет; сочетание получает приложение |
-| Отпустить Ctrl, затем нажать букву, удерживая Shift | Переключения нет |
-| Добавить Option, Command или Fn в течение сочетания | Переключения нет, если модификатор не входит в настройку |
-| Щёлкнуть мышью, перетаскивать или прокручивать во время сочетания | Переключения нет |
-| Настроить Ctrl + Option + Space | Одно переключение после отпускания Space и обоих модификаторов |
-| Включить приложение с уже зажатыми клавишами | Сначала нужно отпустить их; переключение возможно со следующего нажатия |
+| Press Ctrl, then Shift; release both | One switch after the last key is released |
+| Press Shift, then Ctrl; release in either order | Same behavior |
+| Hold Ctrl + Shift | No switch until release |
+| Press Ctrl + Shift + a letter | No switch; the active app receives the shortcut |
+| Release Ctrl, then press a letter while holding Shift | No switch |
+| Add Option, Command, or Fn during the gesture | No switch if the extra modifier is not part of the configured shortcut |
+| Click, drag, or scroll during the gesture | No switch |
+| Configure Ctrl + Option + Space | One switch after Space and both modifiers are released |
+| Start the app while keys are already held | Release them first; the next gesture can switch layouts |
 
-После отменённого сочетания нужно отпустить все клавиши перед следующей попыткой. Нажатия не поглощаются глобально. Если настроить сочетание с обычной клавишей, активное приложение тоже получит его — выбирайте свободное сочетание. Буквы при записи обозначают **физические позиции английской клавиатуры**, независимо от активного языка.
+After a cancelled gesture, release all keys before trying again. Keyboard events are not suppressed globally. If you configure a shortcut with a regular key, the active app also receives it, so choose an unused combination. Letters shown during recording refer to **physical English keyboard positions**, regardless of the current input language.
 
-Caps Lock и Fn не назначаются в качестве сочетания. Уже включённый Caps Lock не мешает работе; нажатие Caps Lock во время сочетания отменяет переключение. F1–F16 можно записать, если клавиатура отправляет обычные F-клавиши без удержания Fn; мультимедийные клавиши не поддерживаются.
+Caps Lock and Fn cannot be assigned as shortcuts. An already enabled Caps Lock does not interfere; pressing Caps Lock during a gesture cancels switching. F1–F16 can be recorded when the keyboard sends regular function keys without holding Fn. Media keys are not supported.
 
-## Ограничения macOS
+## macOS limitations
 
-- **Secure Input.** При защищённом вводе наблюдение может быть недоступно, например с Secure Keyboard Entry в Terminal. Приложение показывает это состояние и возобновляет работу после его окончания. Сохраните штатное системное сочетание как запасное.
-- **Сложные методы ввода.** Выбираются включённые и доступные для выбора источники, включая режимы IME. Составление китайского/японского символа лучше завершить до переключения: поведение незавершённой композиции зависит от метода ввода и версии macOS. Отдельной обработки композиции в этой версии нет.
-- **Конфликт системных сочетаний.** Зарезервированное macOS сочетание может выполнить системное действие или не попасть в приложение. При записи выберите другое.
-- **Локальная подпись.** По умолчанию `.app` подписывается ad hoc для локального использования. Для стабильного доверия между пересборками можно передать `CODESIGN_IDENTITY="имя вашего сертификата" ./scripts/build.sh`. После пересборки, переноса или смены подписи macOS может потребовать повторную выдачу разрешения. Для распространения на другие Mac нужны подходящая подпись и нотарификация; скрипт их не выполняет.
-- **Одна запущенная копия.** Второй процесс с тем же bundle ID завершается, чтобы одно нажатие не вызывало два переключения.
+- **Secure Input.** Monitoring may be unavailable during protected input, such as Terminal's Secure Keyboard Entry. The app displays this state and resumes when it ends. Keep the standard macOS input source shortcut as a fallback.
+- **Complex input methods.** The app selects enabled, selectable sources, including IME modes. Finish composing Chinese or Japanese characters before switching: handling of unfinished composition depends on the input method and macOS version. This version has no special composition handling.
+- **System shortcut conflicts.** A shortcut reserved by macOS may perform a system action or never reach the app. Choose another combination when recording.
+- **Local signing.** The build script uses an ad hoc signature by default. For more stable trust across rebuilds, use `CODESIGN_IDENTITY="your certificate name" ./scripts/build.sh`. Rebuilding, moving the app, or changing its signature may require granting permission again. The script does not automatically perform Developer ID signing or notarization. The downloadable 1.0.0 archive also uses an ad hoc signature.
+- **One running copy.** A second process with the same bundle ID exits so that one gesture does not switch layouts twice.
 
-## Проверки и разработка
+## Development and verification
 
 ```sh
-# Тесты распознавания, записи сочетания и выбора следующей раскладки
+# Test shortcut recognition, recording, and input source cycling
 ./scripts/swift.sh test
 
-# Отладочная сборка
+# Debug build
 ./scripts/swift.sh build
 
-# Сборка .app с оптимизацией, иконкой и локальной подписью
+# Optimized .app bundle with an icon and local signature
 ./scripts/build.sh
 
-# Диагностика без запроса разрешения и без переключения раскладки
+# Diagnostics without requesting permission or changing the input source
 dist/LayoutSwitch.app/Contents/MacOS/LayoutSwitch --diagnose
 ```
 
-Диагностика выводит JSON: доступность мониторинга ввода для этого процесса, состояние Secure Input, текущий источник и список доступных источников. Для проверки глобального сочетания запускайте `.app`: запуск бинарника из Terminal может иметь другой контекст разрешений macOS.
+Diagnostics print JSON with the process's Input Monitoring permission, Secure Input state, current source, and available sources. Launch the `.app` to test global shortcuts: running its executable from Terminal may use a different macOS permission context.
 
-Все кэши сборки находятся в `.build`. Обёртка `scripts/swift.sh` отключает вложенную песочницу SwiftPM для работы из ограниченных сред разработки. В пакете нет внешних зависимостей, плагинов и сетевых запросов.
+Build caches stay in `.build`. The `scripts/swift.sh` wrapper disables SwiftPM's nested sandbox so builds work in restricted development environments. The package has no external dependencies, plugins, or network requests.
 
-### Устройство
+### Project structure
 
 ```text
-Sources/ShortcutCore/       распознавание и запись сочетаний, выбор следующего источника
-Sources/LayoutSwitch/      CGEventTap, TIS, настройки, SwiftUI и приложение в строке меню
-Tests/ShortcutCoreTests/   тесты без глобального ввода и системных разрешений
-Resources/Info.plist       настройки .app
-scripts/                  сборка и генерация иконки через AppKit
-dist/LayoutSwitch.app     результат сборки (не включается в git)
+Sources/ShortcutCore/      shortcut recognition and recording, input source cycling
+Sources/LayoutSwitch/     CGEventTap, TIS, preferences, SwiftUI, and the menu bar app
+Tests/ShortcutCoreTests/   tests without global input or system permissions
+Resources/Info.plist       app bundle configuration
+scripts/                  build scripts and AppKit icon generation
+dist/LayoutSwitch.app     build output (not tracked in Git)
 ```
 
-`CGEventTap` с `.listenOnly` получает флаги, коды клавиш и действия мышью на главном run loop. Состояние распознавания отделено от AppKit и TIS. Переключение откладывается за пределы callback события, чтобы не блокировать доставку ввода. При отключении tap, сне, смене сеанса или Secure Input незавершённое сочетание сбрасывается.
+`CGEventTap` with `.listenOnly` receives modifier flags, key codes, and mouse actions on the main run loop. Shortcut state is separate from AppKit and TIS. Input source selection runs outside the event callback to avoid blocking input delivery. An unfinished gesture is reset when the tap is disabled, the Mac sleeps, the session changes, or Secure Input is detected.
 
-`TISSelectInputSource` выбирает источник напрямую. Список обновляется по системным уведомлениям и перед переключением; исчезнувшие источники пропускаются. Если доступно меньше двух отмеченных источников, приложение не подменяет выбор пользователя другими раскладками.
+`TISSelectInputSource` selects an input source directly. The list is refreshed on system notifications and before switching; removed sources are skipped. If fewer than two checked sources are available, the app does not substitute unchecked sources.
 
-Разрешение проверяется через [CGPreflightListenEventAccess](https://developer.apple.com/documentation/coregraphics/cgpreflightlisteneventaccess()) и запрашивается через [CGRequestListenEventAccess](https://developer.apple.com/documentation/coregraphics/cgrequestlisteneventaccess()). Автозапуск использует [SMAppService.mainApp](https://developer.apple.com/documentation/servicemanagement/smappservice/mainapp) и [register()](https://developer.apple.com/documentation/servicemanagement/smappservice/register()). Описание TIS также доступно в `TextInputSources.h` локального macOS SDK.
+Permission is checked with [CGPreflightListenEventAccess](https://developer.apple.com/documentation/coregraphics/cgpreflightlisteneventaccess()) and requested with [CGRequestListenEventAccess](https://developer.apple.com/documentation/coregraphics/cgrequestlisteneventaccess()). Launch at login uses [SMAppService.mainApp](https://developer.apple.com/documentation/servicemanagement/smappservice/mainapp) and [register()](https://developer.apple.com/documentation/servicemanagement/smappservice/register()). TIS documentation is also available in `TextInputSources.h` in the local macOS SDK.
 
-Приложение не получает текст через события клавиатуры, не ведёт журнал нажатий и не отправляет данные в сеть. В памяти во время жеста хранятся только коды зажатых клавиш и состояние модификаторов.
+The app does not extract typed text from keyboard events, log keystrokes, or send data over the network. Only held key codes and modifier state are kept in memory during a gesture.
 
-### Проверка вручную
+### Manual checks
 
-1. Разрешить Input Monitoring и проверить Ctrl + Shift в TextEdit с русской и английской раскладками, с обеими сторонами клавиатуры и разным порядком нажатия/отпускания.
-2. Проверить Ctrl + Shift + стрелка/буква в редакторе: выполняется действие редактора, раскладка остаётся прежней.
-3. Удерживать сочетание, затем отпустить: ровно одно переключение. Проверить отмену кликом и прокруткой.
-4. Записать другое сочетание, отменить запись через Esc и переключением окна. После перезапуска проверить сохранение настройки.
-5. Выбрать две раскладки из трёх, удалить одну в macOS, проверить предупреждение и отсутствие переключения на неотмеченную.
-6. Проверить паузу, сон/пробуждение и Secure Keyboard Entry в Terminal. Выключить защищённый ввод и проверить восстановление.
-7. Включить автозапуск, проверить его в настройках macOS; отключить, если он не нужен.
+1. Grant Input Monitoring and test Ctrl + Shift in TextEdit with English and Russian layouts, using both sides of the keyboard and different press/release orders.
+2. Test Ctrl + Shift + an arrow or letter in an editor: the editor's action should work and the layout should stay unchanged.
+3. Hold the shortcut, then release it: exactly one switch. Check cancellation by clicking and scrolling.
+4. Record another shortcut; cancel recording with Esc and by switching windows. Restart the app and check that the saved shortcut persists.
+5. Select two of three sources, remove one in macOS, and check that the app shows a warning without switching to an unchecked source.
+6. Test pause, sleep/wake, and Terminal's Secure Keyboard Entry. Disable secure input and check that monitoring resumes.
+7. Enable launch at login and check it in System Settings; disable it if you do not need it.
 
-Тесты покрывают логику без генерации глобальных событий. Разрешения, реальную доставку аппаратных событий, особенности IME и вход в систему нужно проверять на используемом Mac.
+Automated tests cover logic without generating global events. Permissions, hardware event delivery, IME behavior, and login need to be verified on the Mac where the app will run.
 
-## Удаление
+## Uninstall
 
-Отключите автозапуск в настройках приложения, выберите «Завершить LayoutSwitch» и удалите `.app`. При необходимости удалите LayoutSwitch из списка «Мониторинг ввода» в системных настройках.
+Disable launch at login in the app's settings, choose **Quit LayoutSwitch** (`Завершить LayoutSwitch`), and delete the `.app`. If needed, remove LayoutSwitch from the Input Monitoring list in System Settings.
