@@ -16,21 +16,21 @@ struct ShortcutRecognizerTests {
         return events.indices.filter { recognizer.handle(events[$0]) }
     }
 
-    @Test func testEitherPressAndReleaseOrderTriggersOnlyAfterLastRelease() {
+    @Test func testEitherPressAndReleaseOrderTriggersWhenEitherModifierIsReleased() {
         for first: Modifiers in [.control, .shift] {
             for remaining: Modifiers in [.control, .shift] {
-                #expect(switches([flags(first), flags(chord), flags(remaining), flags([])]) == [3])
+                #expect(switches([flags(first), flags(chord), flags(remaining), flags([])]) == [2])
             }
         }
     }
 
     @Test func testHoldingAndDuplicateFlagsDoNotRetrigger() {
-        #expect(switches([flags(chord), flags(chord), flags(chord), flags(.shift), flags([]), flags([])]) == [4])
+        #expect(switches([flags(chord), flags(chord), flags(chord), flags(.shift), flags([]), flags([])]) == [3])
     }
 
     @Test func testMultipleLeftAndRightModifierEventsWaitForAggregateRelease() {
         #expect(switches([flags(.control), flags(.control), flags(chord), flags(chord),
-                                 flags(chord), flags(.control), flags(.control), flags([])]) == [7])
+                                 flags(chord), flags(.control), flags(.control), flags([])]) == [5])
     }
 
     @Test func testThirdKeyCancelsEvenWhenReleasedBeforeModifiers() {
@@ -41,8 +41,10 @@ struct ShortcutRecognizerTests {
         #expect(switches([flags(chord), down(0, chord), flags([]), up(0, [])]) == [])
     }
 
-    @Test func testKeyAfterPartialModifierReleaseStillCancels() {
-        #expect(switches([flags(chord), flags(.shift), down(0, .shift), up(0, .shift), flags([])]) == [])
+    @Test func testKeyAfterSwitchBlocksFurtherSwitchesUntilAllKeysAreReleased() {
+        #expect(switches([flags(chord), flags(.shift), down(0, .shift), up(0, .shift),
+                         flags(chord), flags(.shift), flags([]),
+                         flags(chord), flags(.control), flags([])]) == [1, 8])
     }
 
     @Test func testKeyHeldBeforeModifiersCancels() {
@@ -53,16 +55,37 @@ struct ShortcutRecognizerTests {
         #expect(switches([flags(.control), down(0, .control), up(0, .control), flags(chord), flags([])]) == [])
     }
 
-    @Test func testExtraModifierAtEveryStageCancels() {
+    @Test func testExtraModifierBeforeOrDuringReleaseCancels() {
         for extra: Modifiers in [.option, .command, .function] {
             #expect(switches([flags(extra), flags(chord.union(extra)), flags(chord), flags([])]) == [])
             #expect(switches([flags(chord), flags(chord.union(extra)), flags(chord), flags([])]) == [])
-            #expect(switches([flags(chord), flags(.shift), flags([.shift, extra]), flags([])]) == [])
+            #expect(switches([flags(chord), flags([.shift, extra]), flags(.shift), flags(chord), flags([])]) == [])
         }
     }
 
-    @Test func testRepressingAModifierDuringReleaseCancels() {
-        #expect(switches([flags(chord), flags(.shift), flags(chord), flags([])]) == [])
+    @Test func testExtraModifierAfterSwitchBlocksFurtherSwitchesUntilAllKeysAreReleased() {
+        for extra: Modifiers in [.option, .command, .function] {
+            #expect(switches([flags(chord), flags(.shift), flags([.shift, extra]),
+                             flags(.shift), flags(chord), flags(.shift), flags([]),
+                             flags(chord), flags([])]) == [1, 8])
+        }
+    }
+
+    @Test func testAltShiftCanRepeatWhileEitherModifierRemainsHeld() {
+        let shortcut = Shortcut(modifiers: [.option, .shift])
+        let mods = shortcut.modifiers
+        for first: Modifiers in [.option, .shift] {
+            for remaining: Modifiers in [.option, .shift] {
+                #expect(switches([flags(first), flags(mods), flags(remaining),
+                                 flags(mods), flags(remaining), flags(mods), flags(remaining),
+                                 flags([])], shortcut: shortcut) == [2, 4, 6])
+            }
+        }
+    }
+
+    @Test func testRepeatedChordCanAlternateWhichModifierIsReleased() {
+        #expect(switches([flags(chord), flags(.shift), flags(chord), flags(.control),
+                         flags(chord), flags([]), flags(chord), flags([])]) == [1, 3, 5, 7])
     }
 
     @Test func testNextCleanGestureWorksAfterCancelledGesture() {
@@ -80,6 +103,14 @@ struct ShortcutRecognizerTests {
         #expect(switches([flags(chord), .init(.otherAction, modifiers: chord), flags([])]) == [])
     }
 
+    @Test func testMouseActionAfterSwitchBlocksFurtherSwitchesUntilAllKeysAreReleased() {
+        for action: ShortcutEvent.Kind in [.pointerDown(0), .otherAction] {
+            #expect(switches([flags(chord), flags(.shift), .init(action, modifiers: .shift),
+                             .init(.pointerUp(0), modifiers: .shift), flags(chord), flags(.shift),
+                             flags([]), flags(chord), flags([])]) == [1, 8])
+        }
+    }
+
     @Test func testMissingKeyDownIsConservativelyCancelled() {
         #expect(switches([flags(chord), up(0, chord), flags([])]) == [])
     }
@@ -89,9 +120,12 @@ struct ShortcutRecognizerTests {
         #expect(recognizer.handle(flags(chord)) == false)
         recognizer.reset(modifiers: chord)
         #expect(recognizer.handle(flags(.shift)) == false)
+        #expect(recognizer.handle(flags(chord)) == false)
+        #expect(recognizer.handle(flags(.control)) == false)
         #expect(recognizer.handle(flags([])) == false)
         #expect(recognizer.handle(flags(chord)) == false)
-        #expect(recognizer.handle(flags([])) == true)
+        #expect(recognizer.handle(flags(.shift)) == true)
+        #expect(recognizer.handle(flags([])) == false)
     }
 
     @Test func testHeldKeyAndMouseAtStartupMustBeReleased() {
@@ -110,20 +144,33 @@ struct ShortcutRecognizerTests {
             let shortcut = Shortcut(modifiers: modifiers)
             #expect(shortcut.isValid)
             #expect(switches([flags(modifiers), flags(modifiers), flags([])], shortcut: shortcut) == [2])
+            for released: Modifiers in [.control, .shift, .option, .command] where modifiers.contains(released) {
+                let remaining = modifiers.subtracting(released)
+                #expect(switches([flags(modifiers), flags(remaining), flags(remaining),
+                                 flags(modifiers), flags(remaining), flags([])], shortcut: shortcut) == [1, 4])
+            }
         }
     }
 
-    @Test func testOrdinaryKeyChordWaitsForKeysAndModifiersInEitherReleaseOrder() {
+    @Test func testOrdinaryKeyChordTriggersWhenAnyKeyIsReleased() {
         let shortcut = Shortcut(modifiers: [.control, .option], keyCode: 49)
         let mods = shortcut.modifiers
-        #expect(switches([flags(mods), down(49, mods), up(49, mods), flags([])], shortcut: shortcut) == [3])
-        #expect(switches([flags(mods), down(49, mods), flags([]), up(49, [])], shortcut: shortcut) == [3])
+        #expect(switches([flags(mods), down(49, mods), up(49, mods), flags([])], shortcut: shortcut) == [2])
+        #expect(switches([flags(mods), down(49, mods), flags([]), up(49, [])], shortcut: shortcut) == [2])
+        for remaining: Modifiers in [.control, .option] {
+            #expect(switches([flags(mods), down(49, mods), flags(remaining),
+                             up(49, remaining), flags([])], shortcut: shortcut) == [2])
+            #expect(switches([flags(mods), down(49, mods), flags(remaining),
+                             flags([]), up(49, [])], shortcut: shortcut) == [2])
+        }
     }
 
     @Test func testOrdinaryKeyAutoRepeatTriggersOnce() {
         let shortcut = Shortcut(modifiers: .option, keyCode: 49)
         #expect(switches([flags(.option), down(49, .option), down(49, .option, repeat: true),
-                                 down(49, .option, repeat: true), up(49, .option), flags([])], shortcut: shortcut) == [5])
+                                 down(49, .option, repeat: true), up(49, .option), flags([])], shortcut: shortcut) == [4])
+        #expect(switches([flags(.option), down(49, .option), flags([]),
+                         down(49, [], repeat: true), up(49, [])], shortcut: shortcut) == [2])
     }
 
     @Test func testOrdinaryKeyMustFollowItsModifiers() {
@@ -131,12 +178,24 @@ struct ShortcutRecognizerTests {
         #expect(switches([down(49, []), flags(.option), up(49, .option), flags([])], shortcut: shortcut) == [])
     }
 
-    @Test func testExtraKeyAndRepeatedPressCancelOrdinaryKeyChord() {
+    @Test func testExtraKeyCancelsOrdinaryKeyChord() {
         let shortcut = Shortcut(modifiers: .option, keyCode: 49)
         #expect(switches([flags(.option), down(49, .option), down(0, .option),
                                  up(0, .option), up(49, .option), flags([])], shortcut: shortcut) == [])
+    }
+
+    @Test func testOrdinaryKeyCanRepeatWhileModifiersRemainHeld() {
+        let shortcut = Shortcut(modifiers: .option, keyCode: 49)
         #expect(switches([flags(.option), down(49, .option), up(49, .option),
-                                 down(49, .option), up(49, .option), flags([])], shortcut: shortcut) == [])
+                         down(49, .option), up(49, .option), flags([])], shortcut: shortcut) == [2, 4])
+    }
+
+    @Test func testModifierCanRepeatWhileOrdinaryKeyRemainsHeld() {
+        let shortcut = Shortcut(modifiers: .option, keyCode: 49)
+        #expect(switches([flags(.option), down(49, .option), flags([]),
+                         flags(.option), flags([]), up(49, [])], shortcut: shortcut) == [2, 4])
+        #expect(switches([flags(.option), down(49, .option), flags([]),
+                         flags(.option), up(49, .option), flags([])], shortcut: shortcut) == [2, 4])
     }
 
     @Test func testInvalidConfigurationNeverFires() {

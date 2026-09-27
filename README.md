@@ -28,7 +28,7 @@ brew upgrade --cask lukdut/layoutswitch/layoutswitch
 
 ## Download
 
-Download [LayoutSwitch 1.0.1 for Apple Silicon](https://github.com/lukdut/LayoutSwitch/releases/download/v1.0.1/LayoutSwitch-1.0.1-macos-arm64.zip) from the [release page](https://github.com/lukdut/LayoutSwitch/releases/tag/v1.0.1), extract the archive, and move `LayoutSwitch.app` to `/Applications`. Requires macOS 13 or later. The app interface in version 1.0.1 is in Russian.
+Download [LayoutSwitch 1.1.0 for Apple Silicon](https://github.com/lukdut/LayoutSwitch/releases/download/v1.1.0/LayoutSwitch-1.1.0-macos-arm64.zip) from the [release page](https://github.com/lukdut/LayoutSwitch/releases/tag/v1.1.0), extract the archive, and move `LayoutSwitch.app` to `/Applications`. Requires macOS 13 or later. The app interface in version 1.1.0 is in Russian.
 
 The prebuilt app is for **Apple Silicon (arm64)**. On an Intel Mac, build from source using the instructions below. The release also includes `SHA256SUMS.txt` to verify the archive:
 
@@ -58,7 +58,7 @@ The finished app is at `dist/LayoutSwitch.app`. For everyday use, move it to `/A
 1. Click **Request access** (`Запросить доступ`) in the settings window.
 2. Open **System Settings → Privacy & Security → Input Monitoring** and enable **LayoutSwitch**. The **Open macOS settings** (`Открыть настройки macOS`) button takes you there. If the app is missing from the list, add the `.app` using the “+” button.
 3. If macOS asks you to quit the app, quit and reopen it. Use **Retry connection** (`Повторить подключение`) if needed.
-4. Make sure at least two input sources are selected. Press and fully release **Ctrl + Shift** in a regular text field.
+4. Make sure at least two input sources are selected. Press **Ctrl + Shift** and release either key in a regular text field.
 
 The user grants permission in System Settings. The app listens passively and does not request Accessibility access.
 
@@ -85,26 +85,27 @@ The ad hoc signature changes when the app is rebuilt. macOS may require permissi
 
 | Action | Result |
 | --- | --- |
-| Press Ctrl, then Shift; release both | One switch after the last key is released |
+| Press Ctrl, then Shift; release either key | One switch immediately on release; releasing the remaining key does not switch again |
 | Press Shift, then Ctrl; release in either order | Same behavior |
+| Configure Alt + Shift, hold Alt (Option), and repeatedly press and release Shift | One switch per Shift release; holding Shift and repeatedly pressing and releasing Alt also works |
 | Hold Ctrl + Shift | No switch until release |
 | Press Ctrl + Shift + a letter | No switch; the active app receives the shortcut |
-| Release Ctrl, then press a letter while holding Shift | No switch |
-| Add Option, Command, or Fn during the gesture | No switch if the extra modifier is not part of the configured shortcut |
-| Click, drag, or scroll during the gesture | No switch |
-| Configure Ctrl + Option + Space | One switch after Space and both modifiers are released |
+| Hold Ctrl + Shift, release Ctrl, then press a letter while holding Shift | The layout already switched on Ctrl release; the letter does not trigger another switch |
+| Add Option, Command, or Fn before releasing a shortcut key | No switch if the extra modifier is not part of the configured shortcut |
+| Click, drag, or scroll before releasing a shortcut key | No switch |
+| Configure Ctrl + Option + Space | One switch when Ctrl, Option, or Space is released; pressing and releasing it again while holding the other keys switches again |
 | Start the app while keys are already held | Release them first; the next gesture can switch layouts |
 
-After a cancelled gesture, release all keys before trying again. Keyboard events are not suppressed globally. If you configure a shortcut with a regular key, the active app also receives it, so choose an unused combination. Letters shown during recording refer to **physical English keyboard positions**, regardless of the current input language.
+To switch again, complete the chord again and release any of its keys. After a cancelled gesture, release all keys before trying again. An extra key or mouse action after a switch also blocks further switches until everything is released. Keyboard events are not suppressed globally. If you configure a shortcut with a regular key, the active app also receives it, so choose an unused combination. Letters shown during recording refer to **physical English keyboard positions**, regardless of the current input language.
 
-Caps Lock and Fn cannot be assigned as shortcuts. An already enabled Caps Lock does not interfere; pressing Caps Lock during a gesture cancels switching. F1–F16 can be recorded when the keyboard sends regular function keys without holding Fn. Media keys are not supported.
+Caps Lock and Fn cannot be assigned as shortcuts. An already enabled Caps Lock does not interfere; pressing Caps Lock before releasing a shortcut key cancels switching. F1–F16 can be recorded when the keyboard sends regular function keys without holding Fn. Media keys are not supported.
 
 ## macOS limitations
 
 - **Secure Input.** Monitoring may be unavailable during protected input, such as Terminal's Secure Keyboard Entry. The app displays this state and resumes when it ends. Keep the standard macOS input source shortcut as a fallback.
 - **Complex input methods.** The app selects enabled, selectable sources, including IME modes. Finish composing Chinese or Japanese characters before switching: handling of unfinished composition depends on the input method and macOS version. This version has no special composition handling.
 - **System shortcut conflicts.** A shortcut reserved by macOS may perform a system action or never reach the app. Choose another combination when recording.
-- **Local signing.** The build script uses an ad hoc signature by default. For more stable trust across rebuilds, use `CODESIGN_IDENTITY="your certificate name" ./scripts/build.sh`. Rebuilding, moving the app, or changing its signature may require granting permission again. The script does not automatically perform Developer ID signing or notarization. The downloadable 1.0.1 archive also uses an ad hoc signature.
+- **Local signing.** The build script uses an ad hoc signature by default. For more stable trust across rebuilds, use `CODESIGN_IDENTITY="your certificate name" ./scripts/build.sh`. Rebuilding, moving the app, or changing its signature may require granting permission again. The script does not automatically perform Developer ID signing or notarization. The downloadable 1.1.0 archive also uses an ad hoc signature.
 - **One running copy.** A second process with the same bundle ID exits so that one gesture does not switch layouts twice.
 
 ## Development and verification
@@ -125,7 +126,7 @@ dist/LayoutSwitch.app/Contents/MacOS/LayoutSwitch --diagnose
 
 Diagnostics print JSON with the process's Input Monitoring permission, Secure Input state, current source, and available sources. Launch the `.app` to test global shortcuts: running its executable from Terminal may use a different macOS permission context.
 
-Shortcut switches taking at least 100 ms after the final key release write timing information to the system log: event delivery (`delivery`), waiting to run the handler (`queue`), and switching (`switch`). To view these entries from the last 10 minutes:
+Shortcut switches taking at least 100 ms after the key release that triggered them write timing information to the system log: event delivery (`delivery`), waiting to run the handler (`queue`), and switching (`switch`). To view these entries from the last 10 minutes:
 
 ```sh
 log show --last 10m --style compact --predicate 'subsystem == "local.masos.LayoutSwitch" AND category == "SwitchLatency"'
@@ -162,7 +163,7 @@ The app does not extract typed text from keyboard events, log keystrokes, or sen
 
 1. Grant Input Monitoring and test Ctrl + Shift in TextEdit with English and Russian layouts, using both sides of the keyboard and different press/release orders.
 2. Test Ctrl + Shift + an arrow or letter in an editor: the editor's action should work and the layout should stay unchanged.
-3. Hold the shortcut, then release it: exactly one switch. Check cancellation by clicking and scrolling.
+3. Hold the shortcut, then release any of its keys: one switch. Releasing the remaining keys must not switch again. With Alt + Shift, repeatedly press and release Shift while holding Alt, then try the reverse: each release switches layouts. Check cancellation by clicking and scrolling before releasing a key.
 4. Record another shortcut; cancel recording with Esc and by switching windows. Restart the app and check that the saved shortcut persists.
 5. Select two of three sources, remove one in macOS, and check that the app shows a warning without switching to an unchecked source.
 6. Test pause, sleep/wake, and Terminal's Secure Keyboard Entry. Disable secure input and check that monitoring resumes.

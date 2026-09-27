@@ -16,8 +16,9 @@ public struct ShortcutEvent: Sendable {
     }
 }
 
-/// One gesture lasts until ALL keys and modifiers have been released.
-/// No event is suppressed. A conflicting action cancels the whole gesture.
+/// A complete chord triggers once when any of its keys is released.
+/// Completing it again rearms the shortcut while other keys remain held.
+/// No event is suppressed. A conflict blocks switching until all keys are up.
 public struct ShortcutRecognizer {
     public let shortcut: Shortcut
     private var modifiers: Modifiers = []
@@ -25,7 +26,6 @@ public struct ShortcutRecognizer {
     private var buttonsDown: Set<Int> = []
     private var armed = false
     private var cancelled = false
-    private var releasing = false
 
     public init(shortcut: Shortcut) { self.shortcut = shortcut }
 
@@ -38,38 +38,29 @@ public struct ShortcutRecognizer {
         self.keysDown = keysDown
         self.buttonsDown = buttonsDown
         armed = false
-        releasing = false
         cancelled = !modifiers.isEmpty || !keysDown.isEmpty || !buttonsDown.isEmpty
     }
 
     @discardableResult
     public mutating func handle(_ event: ShortcutEvent) -> Bool {
-        let previousModifiers = modifiers
         modifiers = event.modifiers
 
         if !modifiers.subtracting(shortcut.modifiers).isEmpty { cancelled = true }
-        if releasing && !modifiers.subtracting(previousModifiers).isEmpty { cancelled = true }
-        if armed && !previousModifiers.subtracting(modifiers).isEmpty { releasing = true }
 
         switch event.kind {
         case .modifiersChanged:
-            if shortcut.keyCode == nil && modifiers == shortcut.modifiers && keysDown.isEmpty {
-                armed = true
-            }
+            break
         case let .keyDown(code, isRepeat):
             let alreadyDown = keysDown.contains(code)
             keysDown.insert(code)
             if isRepeat && alreadyDown { break }
-            if code == shortcut.keyCode && modifiers == shortcut.modifiers &&
-                keysDown.count == 1 && !releasing && !isRepeat {
-                armed = true
-            } else {
+            if code != shortcut.keyCode || modifiers != shortcut.modifiers ||
+                keysDown.count != 1 || isRepeat {
                 cancelled = true
             }
         case let .keyUp(code):
             if !keysDown.contains(code) { cancelled = true }
             keysDown.remove(code)
-            if armed { releasing = true }
         case let .pointerDown(button):
             buttonsDown.insert(button)
             cancelled = true
@@ -80,9 +71,11 @@ public struct ShortcutRecognizer {
             cancelled = true
         }
 
-        guard modifiers.isEmpty && keysDown.isEmpty && buttonsDown.isEmpty else { return false }
-        let shouldSwitch = shortcut.isValid && armed && !cancelled
-        reset()
+        let matchingKeys = shortcut.keyCode.map { keysDown == [$0] } ?? keysDown.isEmpty
+        let chordHeld = modifiers == shortcut.modifiers && matchingKeys
+        let shouldSwitch = shortcut.isValid && armed && !chordHeld && !cancelled
+        armed = chordHeld && !cancelled
+        if modifiers.isEmpty && keysDown.isEmpty && buttonsDown.isEmpty { reset() }
         return shouldSwitch
     }
 }

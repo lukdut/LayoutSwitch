@@ -109,7 +109,7 @@ struct SettingsView: View {
                 } else {
                     Text("Два или больше модификаторов: Ctrl, Shift, Option, Command. Либо модификатор с одной обычной клавишей. Левые и правые клавиши равнозначны.")
                         .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                    Text("Срабатывает после отпускания всех клавиш. Дополнительная клавиша или действие мышью отменяют переключение.")
+                    Text("Срабатывает при отпускании любой клавиши сочетания. Можно удерживать остальные и повторно нажимать и отпускать одну клавишу. Дополнительная клавиша или действие мышью до отпускания отменяют переключение.")
                         .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     if model.settings.shortcut.keyCode != nil {
                         Label("Сочетание также получит активное приложение. Выберите свободное сочетание. Буквы обозначают физические клавиши английской раскладки.", systemImage: "info.circle")

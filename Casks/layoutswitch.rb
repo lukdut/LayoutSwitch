@@ -1,6 +1,6 @@
 cask "layoutswitch" do
-  version "1.0.1"
-  sha256 "a97ccb540a671dbd46d1854b6bddf205f803d9f527a4d31c280dac9ce62a51e1"
+  version "1.1.0"
+  sha256 "fa76d54b9e22ee08cdd49b601de1bc93e1f7d2f2dd1407c31e8f571cc437b032"
 
   url "https://github.com/lukdut/LayoutSwitch/releases/download/v#{version}/LayoutSwitch-#{version}-macos-arm64.zip"
   name "LayoutSwitch"
