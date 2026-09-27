@@ -28,7 +28,7 @@ brew upgrade --cask lukdut/layoutswitch/layoutswitch
 
 ## Download
 
-Download [LayoutSwitch 1.0.0 for Apple Silicon](https://github.com/lukdut/LayoutSwitch/releases/download/v1.0.0/LayoutSwitch-1.0.0-macos-arm64.zip) from the [release page](https://github.com/lukdut/LayoutSwitch/releases/tag/v1.0.0), extract the archive, and move `LayoutSwitch.app` to `/Applications`. Requires macOS 13 or later. The app interface in version 1.0.0 is in Russian.
+Download [LayoutSwitch 1.0.1 for Apple Silicon](https://github.com/lukdut/LayoutSwitch/releases/download/v1.0.1/LayoutSwitch-1.0.1-macos-arm64.zip) from the [release page](https://github.com/lukdut/LayoutSwitch/releases/tag/v1.0.1), extract the archive, and move `LayoutSwitch.app` to `/Applications`. Requires macOS 13 or later. The app interface in version 1.0.1 is in Russian.
 
 The prebuilt app is for **Apple Silicon (arm64)**. On an Intel Mac, build from source using the instructions below. The release also includes `SHA256SUMS.txt` to verify the archive:
 
@@ -61,6 +61,15 @@ The finished app is at `dist/LayoutSwitch.app`. For everyday use, move it to `/A
 4. Make sure at least two input sources are selected. Press and fully release **Ctrl + Shift** in a regular text field.
 
 The user grants permission in System Settings. The app listens passively and does not request Accessibility access.
+
+### Input Monitoring after an update
+
+The ad hoc signature changes when the app is rebuilt. macOS may require permission again even if LayoutSwitch is already enabled in Input Monitoring. If quitting and reopening the app does not help:
+
+1. Quit LayoutSwitch from its menu bar menu.
+2. In **System Settings → Privacy & Security → Input Monitoring**, select **LayoutSwitch** and remove its entry with “−”.
+3. Add `/Applications/LayoutSwitch.app` with “+” and enable it.
+4. Reopen LayoutSwitch; if macOS requests a restart, quit and reopen it again.
 
 ## Features
 
@@ -95,7 +104,7 @@ Caps Lock and Fn cannot be assigned as shortcuts. An already enabled Caps Lock d
 - **Secure Input.** Monitoring may be unavailable during protected input, such as Terminal's Secure Keyboard Entry. The app displays this state and resumes when it ends. Keep the standard macOS input source shortcut as a fallback.
 - **Complex input methods.** The app selects enabled, selectable sources, including IME modes. Finish composing Chinese or Japanese characters before switching: handling of unfinished composition depends on the input method and macOS version. This version has no special composition handling.
 - **System shortcut conflicts.** A shortcut reserved by macOS may perform a system action or never reach the app. Choose another combination when recording.
-- **Local signing.** The build script uses an ad hoc signature by default. For more stable trust across rebuilds, use `CODESIGN_IDENTITY="your certificate name" ./scripts/build.sh`. Rebuilding, moving the app, or changing its signature may require granting permission again. The script does not automatically perform Developer ID signing or notarization. The downloadable 1.0.0 archive also uses an ad hoc signature.
+- **Local signing.** The build script uses an ad hoc signature by default. For more stable trust across rebuilds, use `CODESIGN_IDENTITY="your certificate name" ./scripts/build.sh`. Rebuilding, moving the app, or changing its signature may require granting permission again. The script does not automatically perform Developer ID signing or notarization. The downloadable 1.0.1 archive also uses an ad hoc signature.
 - **One running copy.** A second process with the same bundle ID exits so that one gesture does not switch layouts twice.
 
 ## Development and verification
@@ -116,6 +125,14 @@ dist/LayoutSwitch.app/Contents/MacOS/LayoutSwitch --diagnose
 
 Diagnostics print JSON with the process's Input Monitoring permission, Secure Input state, current source, and available sources. Launch the `.app` to test global shortcuts: running its executable from Terminal may use a different macOS permission context.
 
+Shortcut switches taking at least 100 ms after the final key release write timing information to the system log: event delivery (`delivery`), waiting to run the handler (`queue`), and switching (`switch`). To view these entries from the last 10 minutes:
+
+```sh
+log show --last 10m --style compact --predicate 'subsystem == "local.masos.LayoutSwitch" AND category == "SwitchLatency"'
+```
+
+These entries contain durations only, with no typed text or key codes. Timing ends after the selection call and LayoutSwitch's indicator update; the other app may finish applying the layout later.
+
 Build caches stay in `.build`. The `scripts/swift.sh` wrapper disables SwiftPM's nested sandbox so builds work in restricted development environments. The package has no external dependencies, plugins, or network requests.
 
 For each release, update `version` and `sha256` in `Casks/layoutswitch.rb` to match the published archive. Homebrew uses this version for upgrades.
@@ -126,15 +143,16 @@ For each release, update `version` and `sha256` in `Casks/layoutswitch.rb` to ma
 Sources/ShortcutCore/      shortcut recognition and recording, input source cycling
 Sources/LayoutSwitch/     CGEventTap, TIS, preferences, SwiftUI, and the menu bar app
 Tests/ShortcutCoreTests/   tests without global input or system permissions
+Tests/LayoutSwitchTests/   source cache and switching tests with a fake system API
 Casks/layoutswitch.rb     Homebrew installation from GitHub Releases
 Resources/Info.plist       app bundle configuration
 scripts/                  build scripts and AppKit icon generation
 dist/LayoutSwitch.app     build output (not tracked in Git)
 ```
 
-`CGEventTap` with `.listenOnly` receives modifier flags, key codes, and mouse actions on the main run loop. Shortcut state is separate from AppKit and TIS. Input source selection runs outside the event callback to avoid blocking input delivery. An unfinished gesture is reset when the tap is disabled, the Mac sleeps, the session changes, or Secure Input is detected.
+`CGEventTap` with `.listenOnly` receives modifier flags, key codes, and mouse actions on the main run loop. Shortcut state is separate from AppKit and TIS. Input source selection runs outside the event callback in the run loop's common modes, which also run while the menu is open. An unfinished gesture is reset when the tap is disabled, the Mac sleeps, the session changes, or Secure Input is detected.
 
-`TISSelectInputSource` selects an input source directly. The list is refreshed on system notifications and before switching; removed sources are skipped. If fewer than two checked sources are available, the app does not substitute unchecked sources.
+`TISSelectInputSource` selects an input source directly. The source list and system handles are cached and refreshed when enabled sources change, the app becomes active, the Mac wakes, or the user requests a refresh. Normal switching reads the current source and checks selected sources' availability without rebuilding the list. An insufficient list, an unavailable source, or a selection error refreshes the cache. Selection notifications update only the current source; an unknown source triggers a list refresh. If fewer than two checked sources are available, the app does not substitute unchecked sources.
 
 Permission is checked with [CGPreflightListenEventAccess](https://developer.apple.com/documentation/coregraphics/cgpreflightlisteneventaccess()) and requested with [CGRequestListenEventAccess](https://developer.apple.com/documentation/coregraphics/cgrequestlisteneventaccess()). Launch at login uses [SMAppService.mainApp](https://developer.apple.com/documentation/servicemanagement/smappservice/mainapp) and [register()](https://developer.apple.com/documentation/servicemanagement/smappservice/register()). TIS documentation is also available in `TextInputSources.h` in the local macOS SDK.
 
@@ -149,6 +167,7 @@ The app does not extract typed text from keyboard events, log keystrokes, or sen
 5. Select two of three sources, remove one in macOS, and check that the app shows a warning without switching to an unchecked source.
 6. Test pause, sleep/wake, and Terminal's Secure Keyboard Entry. Disable secure input and check that monitoring resumes.
 7. Enable launch at login and check it in System Settings; disable it if you do not need it.
+8. Switch several times quickly, then repeat after switching with the macOS shortcut and while LayoutSwitch's menu is open. Check the `SwitchLatency` log if a switch feels slow.
 
 Automated tests cover logic without generating global events. Permissions, hardware event delivery, IME behavior, and login need to be verified on the Mac where the app will run.
 

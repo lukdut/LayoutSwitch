@@ -9,6 +9,7 @@ let package = Package(
         .target(name: "ShortcutCore"),
         .executableTarget(name: "LayoutSwitch", dependencies: ["ShortcutCore"]),
         .testTarget(name: "ShortcutCoreTests", dependencies: ["ShortcutCore"]),
+        .testTarget(name: "LayoutSwitchTests", dependencies: ["LayoutSwitch"]),
     ],
     swiftLanguageModes: [.v5]
 )

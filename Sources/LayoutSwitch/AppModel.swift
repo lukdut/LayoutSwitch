@@ -80,7 +80,7 @@ final class AppModel: ObservableObject {
         reconcileMonitoring()
         observe(DistributedNotificationCenter.default(),
                 NSNotification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String)) {
-            [weak self] in self?.refreshSources()
+            [weak self] in self?.refreshCurrentSource()
         }
         observe(DistributedNotificationCenter.default(),
                 NSNotification.Name(kTISNotifyEnabledKeyboardInputSourcesChanged as String)) {
@@ -156,6 +156,19 @@ final class AppModel: ObservableObject {
 
     func refreshSources() {
         inputSources.refresh()
+        publishInputSources()
+    }
+
+    private func refreshCurrentSource() {
+        inputSources.refreshCurrent()
+        if let id = inputSources.currentID, !inputSources.sources.contains(where: { $0.id == id }) {
+            inputSources.refresh()
+        }
+        publishInputSources()
+    }
+
+    private func publishInputSources() {
+        guard sources != inputSources.sources || currentSource != inputSources.current else { return }
         if sources != inputSources.sources { sources = inputSources.sources }
         if currentSource != inputSources.current { currentSource = inputSources.current }
         onChange?()
@@ -163,8 +176,9 @@ final class AppModel: ObservableObject {
 
     func switchLayout() {
         guard !isRecording, !IsSecureEventInputEnabled() else { return }
-        errorMessage = inputSources.selectNext(selectedIDs: settings.selectedSourceIDs)
-        refreshSources()
+        let error = inputSources.selectNext(selectedIDs: settings.selectedSourceIDs)
+        if errorMessage != error { errorMessage = error }
+        publishInputSources()
     }
 
     func startRecording() {

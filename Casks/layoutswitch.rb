@@ -1,6 +1,6 @@
 cask "layoutswitch" do
-  version "1.0.0"
-  sha256 "85dc443b3868f6dcbe8260c5f9a43993b7c5c4a11c8f5615b33b44c8258d7c23"
+  version "1.0.1"
+  sha256 "a97ccb540a671dbd46d1854b6bddf205f803d9f527a4d31c280dac9ce62a51e1"
 
   url "https://github.com/lukdut/LayoutSwitch/releases/download/v#{version}/LayoutSwitch-#{version}-macos-arm64.zip"
   name "LayoutSwitch"
@@ -19,6 +19,7 @@ cask "layoutswitch" do
   caveats <<~EOS
     Grant LayoutSwitch Input Monitoring access in:
       System Settings > Privacy & Security > Input Monitoring
+    After an update, macOS may require granting this permission again.
 
     This release is ad hoc signed and is not notarized by Apple.
     If macOS blocks the first launch, use Open Anyway in Privacy & Security

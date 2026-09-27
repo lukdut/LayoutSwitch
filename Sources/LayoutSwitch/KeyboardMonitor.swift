@@ -1,5 +1,6 @@
 import AppKit
 import Carbon
+import OSLog
 import ShortcutCore
 
 extension Modifiers {
@@ -18,6 +19,7 @@ extension Modifiers {
 @MainActor
 final class KeyboardMonitor {
     static let modifierCodes: Set<UInt16> = [54, 55, 56, 58, 59, 60, 61, 62]
+    private static let latencyLog = Logger(subsystem: "local.masos.LayoutSwitch", category: "SwitchLatency")
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
     private var recognizer = ShortcutRecognizer(shortcut: .default)
@@ -119,11 +121,25 @@ final class KeyboardMonitor {
         let modifiers = Modifiers(cgFlags: event.flags, functionDown: functionDown)
         if recognizer.handle(ShortcutEvent(kind, modifiers: modifiers)) {
             // Input source selection can involve IPC. Keep it outside the tap.
+            // Common modes also run while our menu or a modal loop is active.
             let expectedGeneration = generation
-            DispatchQueue.main.async { [weak self] in
-                guard let self, self.generation == expectedGeneration,
-                      self.isRunning, !IsSecureEventInputEnabled() else { return }
-                self.onTrigger?()
+            let receivedAt = DispatchTime.now().uptimeNanoseconds
+            let eventTime = event.timestamp
+            let eventAt = eventTime > 0 ? min(eventTime, receivedAt) : receivedAt
+            CFRunLoopPerformBlock(CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue) { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self, self.generation == expectedGeneration,
+                          self.isRunning, !IsSecureEventInputEnabled() else { return }
+                    let startedAt = DispatchTime.now().uptimeNanoseconds
+                    self.onTrigger?()
+                    let finishedAt = DispatchTime.now().uptimeNanoseconds
+                    if finishedAt - eventAt >= 100_000_000 {
+                        let deliveryMS = Double(receivedAt - eventAt) / 1_000_000
+                        let queueMS = Double(startedAt - receivedAt) / 1_000_000
+                        let switchMS = Double(finishedAt - startedAt) / 1_000_000
+                        Self.latencyLog.notice("Slow layout switch: delivery=\(deliveryMS, privacy: .public) ms, queue=\(queueMS, privacy: .public) ms, switch=\(switchMS, privacy: .public) ms")
+                    }
+                }
             }
         }
     }
