@@ -1,14 +1,9 @@
 import AppKit
 import Carbon
 import Combine
+import OSLog
 import ServiceManagement
 import ShortcutCore
-
-struct SavedSettings: Codable {
-    var shortcut: Shortcut = .default
-    var enabled = true
-    var selectedSourceIDs: [String]? = nil
-}
 
 enum MonitorStatus: Equatable {
     case running, paused, needsPermission, secureInput, recording, inactiveSession, failed
@@ -26,8 +21,14 @@ enum MonitorStatus: Equatable {
     }
 }
 
+struct LayoutSwitchTimings {
+    let inputSource: InputSourceSelectionTimings
+    let publishMS: Double
+}
+
 @MainActor
 final class AppModel: ObservableObject {
+    private static let monitoringLog = Logger(subsystem: "local.masos.LayoutSwitch", category: "Monitoring")
     @Published private(set) var settings: SavedSettings
     @Published private(set) var sources: [InputSource] = []
     @Published private(set) var currentSource: InputSource?
@@ -35,6 +36,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var hasPermission = false
     @Published private(set) var isRecording = false
     @Published private(set) var recordingHint = ""
+    @Published private(set) var recordingShortcut: Shortcut?
+    @Published private(set) var shortcutError: String?
     @Published private(set) var loginStatus = SMAppService.mainApp.status
     @Published var errorMessage: String?
     var onChange: (() -> Void)?
@@ -46,6 +49,7 @@ final class AppModel: ObservableObject {
     private var healthTimer: Timer?
     private var observations: [(NotificationCenter, NSObjectProtocol)] = []
     private var sessionAvailable = true
+    private var lastLoggedStatus: MonitorStatus?
 
     var selectedIDs: [String] {
         InputSourceCycle.candidates(available: sources.map(\.id), selected: settings.selectedSourceIDs)
@@ -56,12 +60,12 @@ final class AppModel: ObservableObject {
         (settings.selectedSourceIDs ?? []).filter { id in !sources.contains { $0.id == id } }.count
     }
     var loginEnabled: Bool { loginStatus == .enabled || loginStatus == .requiresApproval }
+    var shortcutSummary: String { settings.shortcuts.map(\.displayName).joined(separator: " / ") }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        var settings = defaults.data(forKey: "settings")
+        let settings = defaults.data(forKey: "settings")
             .flatMap { try? JSONDecoder().decode(SavedSettings.self, from: $0) } ?? SavedSettings()
-        if !settings.shortcut.isValid { settings.shortcut = .default }
         self.settings = settings
 
         monitor.onTrigger = { [weak self] in self?.switchLayout() }
@@ -69,8 +73,21 @@ final class AppModel: ObservableObject {
         recorder.onHint = { [weak self] in self?.recordingHint = $0 }
         recorder.onComplete = { [weak self] shortcut in
             guard let self else { return }
+            let previous = self.recordingShortcut
             self.isRecording = false
-            if let shortcut { self.settings.shortcut = shortcut; self.persist() }
+            self.recordingShortcut = nil
+            if let shortcut {
+                if let error = self.settings.setShortcut(shortcut, replacing: previous) {
+                    switch error {
+                    case .duplicate: self.shortcutError = "Такое сочетание уже добавлено."
+                    case .invalid: self.shortcutError = "Это сочетание не поддерживается."
+                    case .missing: self.shortcutError = "Редактируемое сочетание уже удалено."
+                    }
+                } else {
+                    self.shortcutError = nil
+                    self.persist()
+                }
+            }
             self.reconcileMonitoring()
         }
     }
@@ -130,8 +147,17 @@ final class AppModel: ObservableObject {
     }
 
     func restoreDefaultShortcut() {
-        recorder.cancel()
-        settings.shortcut = .default
+        guard !isRecording else { return }
+        settings.restoreDefaultShortcut()
+        shortcutError = nil
+        persist()
+        monitor.stop()
+        reconcileMonitoring()
+    }
+
+    func removeShortcut(_ shortcut: Shortcut) {
+        guard !isRecording, settings.removeShortcut(shortcut) else { return }
+        shortcutError = nil
         persist()
         monitor.stop()
         reconcileMonitoring()
@@ -174,15 +200,23 @@ final class AppModel: ObservableObject {
         onChange?()
     }
 
-    func switchLayout() {
-        guard !isRecording, !IsSecureEventInputEnabled() else { return }
+    @discardableResult
+    func switchLayout() -> LayoutSwitchTimings? {
+        guard !isRecording, !IsSecureEventInputEnabled() else { return nil }
         let error = inputSources.selectNext(selectedIDs: settings.selectedSourceIDs)
+        let publishStartedAt = DispatchTime.now().uptimeNanoseconds
         if errorMessage != error { errorMessage = error }
         publishInputSources()
+        return LayoutSwitchTimings(inputSource: inputSources.lastSelectionTimings,
+                                   publishMS: Double(DispatchTime.now().uptimeNanoseconds - publishStartedAt) / 1_000_000)
     }
 
-    func startRecording() {
-        guard let window = NSApp.keyWindow else { return }
+    func startRecording(replacing shortcut: Shortcut? = nil) {
+        guard !isRecording, let window = NSApp.keyWindow else { return }
+        if let shortcut, !settings.shortcuts.contains(shortcut) { return }
+        recordingShortcut = shortcut
+        shortcutError = nil
+        recordingHint = ""
         isRecording = true
         reconcileMonitoring()
         recorder.start(in: window)
@@ -233,10 +267,14 @@ final class AppModel: ObservableObject {
         else if !settings.enabled { next = .paused }
         else if !permission { next = .needsPermission }
         else if IsSecureEventInputEnabled() { next = .secureInput }
-        else if monitor.isRunning || monitor.start(shortcut: settings.shortcut) { next = .running }
+        else if monitor.isRunning || monitor.start(shortcuts: settings.shortcuts) { next = .running }
         else { next = .failed }
         if next != .running { monitor.stop() }
         if status != next { status = next; onChange?() }
+        if lastLoggedStatus != next {
+            lastLoggedStatus = next
+            Self.monitoringLog.notice("Monitoring status: \(String(describing: next), privacy: .public)")
+        }
     }
 
     private func persist() {

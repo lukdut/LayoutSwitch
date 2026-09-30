@@ -20,12 +20,29 @@ public struct ShortcutEvent: Sendable {
 /// Completing it again rearms the shortcut while other keys remain held.
 /// No event is suppressed. A conflict blocks switching until all keys are up.
 public struct ShortcutRecognizer {
+    public enum CancellationReason: String, Sendable {
+        case heldAtReset, extraModifier, otherKey, unexpectedKeyRelease, pointerAction, otherAction
+    }
+
     public let shortcut: Shortcut
+    /// Reported once when a cancelled chord is released, never for ordinary typing.
+    public private(set) var lastCancellationReason: CancellationReason?
     private var modifiers: Modifiers = []
     private var keysDown: Set<UInt16> = []
     private var buttonsDown: Set<Int> = []
     private var armed = false
-    private var cancelled = false
+    private var waitingForChordRelease = false
+    private var cancellationReason: CancellationReason?
+    private var attempted = false
+    private var cancelled: Bool { cancellationReason != nil }
+    private var shortcutKeysHeld: Bool {
+        modifiers.isSuperset(of: shortcut.modifiers) &&
+            (shortcut.keyCode.map { keysDown.contains($0) } ?? true)
+    }
+    private var chordHeld: Bool {
+        modifiers == shortcut.modifiers &&
+            (shortcut.keyCode.map { keysDown == [$0] } ?? keysDown.isEmpty)
+    }
 
     public init(shortcut: Shortcut) { self.shortcut = shortcut }
 
@@ -38,14 +55,31 @@ public struct ShortcutRecognizer {
         self.keysDown = keysDown
         self.buttonsDown = buttonsDown
         armed = false
-        cancelled = !modifiers.isEmpty || !keysDown.isEmpty || !buttonsDown.isEmpty
+        waitingForChordRelease = false
+        cancellationReason = !modifiers.isEmpty || !keysDown.isEmpty || !buttonsDown.isEmpty ? .heldAtReset : nil
+        attempted = shortcut.isValid && shortcutKeysHeld
+        lastCancellationReason = nil
+    }
+
+    // A recognized alternative starts a new gesture. Keep the actual held keys
+    // so shared modifiers can be reused, but do not arm an inherited full chord:
+    // it must be broken and completed again before it can trigger.
+    mutating func prepareForNextShortcut() {
+        armed = false
+        attempted = false
+        lastCancellationReason = nil
+        waitingForChordRelease = chordHeld
+        let matchingKeys = shortcut.keyCode.map { keysDown.isSubset(of: [$0]) } ?? keysDown.isEmpty
+        cancellationReason = !modifiers.subtracting(shortcut.modifiers).isEmpty ||
+            !matchingKeys || !buttonsDown.isEmpty ? .heldAtReset : nil
     }
 
     @discardableResult
     public mutating func handle(_ event: ShortcutEvent) -> Bool {
+        lastCancellationReason = nil
         modifiers = event.modifiers
 
-        if !modifiers.subtracting(shortcut.modifiers).isEmpty { cancelled = true }
+        if !modifiers.subtracting(shortcut.modifiers).isEmpty { cancel(.extraModifier) }
 
         switch event.kind {
         case .modifiersChanged:
@@ -56,26 +90,33 @@ public struct ShortcutRecognizer {
             if isRepeat && alreadyDown { break }
             if code != shortcut.keyCode || modifiers != shortcut.modifiers ||
                 keysDown.count != 1 || isRepeat {
-                cancelled = true
+                cancel(.otherKey)
             }
         case let .keyUp(code):
-            if !keysDown.contains(code) { cancelled = true }
+            if !keysDown.contains(code) { cancel(.unexpectedKeyRelease) }
             keysDown.remove(code)
         case let .pointerDown(button):
             buttonsDown.insert(button)
-            cancelled = true
+            cancel(.pointerAction)
         case let .pointerUp(button):
             buttonsDown.remove(button)
-            cancelled = true
+            cancel(.pointerAction)
         case .otherAction:
-            cancelled = true
+            cancel(.otherAction)
         }
 
-        let matchingKeys = shortcut.keyCode.map { keysDown == [$0] } ?? keysDown.isEmpty
-        let chordHeld = modifiers == shortcut.modifiers && matchingKeys
+        if shortcut.isValid && shortcutKeysHeld { attempted = true }
+        let rejectedBecause = attempted && !shortcutKeysHeld ? cancellationReason : nil
+        if !shortcutKeysHeld { attempted = false }
         let shouldSwitch = shortcut.isValid && armed && !chordHeld && !cancelled
-        armed = chordHeld && !cancelled
+        armed = chordHeld && !cancelled && !waitingForChordRelease
+        if !chordHeld { waitingForChordRelease = false }
         if modifiers.isEmpty && keysDown.isEmpty && buttonsDown.isEmpty { reset() }
+        lastCancellationReason = rejectedBecause
         return shouldSwitch
+    }
+
+    private mutating func cancel(_ reason: CancellationReason) {
+        if cancellationReason == nil { cancellationReason = reason }
     }
 }

@@ -10,6 +10,19 @@ struct InputSource: Identifiable, Equatable {
     var badge: String { String(language.prefix(2)).uppercased() }
 }
 
+struct InputSourceSelectionTimings {
+    enum Outcome: String {
+        case unavailable, failed, confirmed, unconfirmed
+    }
+
+    var outcome: Outcome = .unavailable
+    var statusCode: OSStatus?
+    var readCurrentMS = 0.0
+    var prepareMS = 0.0
+    var selectMS = 0.0
+    var confirmMS = 0.0
+}
+
 @MainActor
 protocol InputSourceBackend {
     func loadSources() -> [InputSource]
@@ -72,6 +85,7 @@ private final class SystemInputSourceBackend: InputSourceBackend {
 final class InputSourceManager {
     private(set) var sources: [InputSource] = []
     private(set) var currentID: String?
+    private(set) var lastSelectionTimings = InputSourceSelectionTimings()
     private let backend: any InputSourceBackend
     var current: InputSource? { sources.first { $0.id == currentID } }
 
@@ -89,26 +103,42 @@ final class InputSourceManager {
     }
 
     func selectNext(selectedIDs: [String]?) -> String? {
+        var timings = InputSourceSelectionTimings()
+        defer { lastSelectionTimings = timings }
+        let startedAt = DispatchTime.now().uptimeNanoseconds
         // Read the actual current source: macOS or another app may have changed
         // it before its notification reached us. Reuse the cached source list.
         refreshCurrent()
+        let readAt = DispatchTime.now().uptimeNanoseconds
+        timings.readCurrentMS = Double(readAt - startedAt) / 1_000_000
         let candidates = InputSourceCycle.candidates(available: sources.map(\.id), selected: selectedIDs)
         if candidates.count < 2 || candidates.contains(where: { !backend.isSelectable($0) }) {
             // Recover if enabled sources changed before their notification arrived.
             refresh()
         }
-        guard let nextID = InputSourceCycle.next(available: sources.map(\.id), selected: selectedIDs,
-                                                current: currentID) else {
+        let nextID = InputSourceCycle.next(available: sources.map(\.id), selected: selectedIDs,
+                                          current: currentID)
+        let preparedAt = DispatchTime.now().uptimeNanoseconds
+        timings.prepareMS = Double(preparedAt - readAt) / 1_000_000
+        guard let nextID else {
             return "Выберите хотя бы две доступные раскладки."
         }
         let status = backend.select(nextID)
+        timings.statusCode = status
+        let selectedAt = DispatchTime.now().uptimeNanoseconds
+        timings.selectMS = Double(selectedAt - preparedAt) / 1_000_000
+        defer {
+            timings.confirmMS = Double(DispatchTime.now().uptimeNanoseconds - selectedAt) / 1_000_000
+        }
         guard status == noErr else {
+            timings.outcome = .failed
             // The source may have disappeared after validation. Discard stale
             // handles so the next attempt uses the latest enabled sources.
             refresh()
             return "macOS не удалось переключить раскладку (код \(status))."
         }
         refreshCurrent()
+        timings.outcome = currentID == nextID ? .confirmed : .unconfirmed
         return nil
     }
 }

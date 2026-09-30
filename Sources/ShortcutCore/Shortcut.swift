@@ -18,7 +18,7 @@ public struct Modifiers: OptionSet, Codable, Hashable, Sendable {
     }
 }
 
-public struct Shortcut: Codable, Equatable, Sendable {
+public struct Shortcut: Codable, Hashable, Sendable {
     public var modifiers: Modifiers
     public var keyCode: UInt16?
 
@@ -28,6 +28,11 @@ public struct Shortcut: Codable, Equatable, Sendable {
     }
 
     public static let `default` = Self(modifiers: [.control, .shift])
+
+    public static func normalized(_ shortcuts: [Shortcut]) -> [Shortcut] {
+        var seen = Set<Shortcut>()
+        return shortcuts.filter { $0.isValid && seen.insert($0).inserted }
+    }
 
     public var isValid: Bool {
         guard modifiers.subtracting(.assignable).isEmpty else { return false }

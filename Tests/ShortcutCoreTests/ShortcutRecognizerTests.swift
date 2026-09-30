@@ -206,6 +206,75 @@ struct ShortcutRecognizerTests {
         }
     }
 
+    @Test func testCancelledChordReportsItsCauseOnceOnRelease() {
+        var recognizer = ShortcutRecognizer(shortcut: .default)
+        for event in [flags(chord), down(0, chord), up(0, chord)] {
+            #expect(recognizer.handle(event) == false)
+            #expect(recognizer.lastCancellationReason == nil)
+        }
+        #expect(recognizer.handle(flags(.shift)) == false)
+        #expect(recognizer.lastCancellationReason == .otherKey)
+        #expect(recognizer.handle(flags([])) == false)
+        #expect(recognizer.lastCancellationReason == nil)
+
+        #expect(recognizer.handle(flags(chord)) == false)
+        #expect(recognizer.handle(flags([])) == true)
+        #expect(recognizer.lastCancellationReason == nil)
+    }
+
+    @Test func testCancellationReasonsDistinguishConflictingActions() {
+        let cases: [(ShortcutRecognizer.CancellationReason, [ShortcutEvent])] = [
+            (.extraModifier, [flags(chord.union(.option)), flags(chord)]),
+            (.unexpectedKeyRelease, [flags(chord), up(0, chord)]),
+            (.pointerAction, [flags(chord), .init(.pointerDown(0), modifiers: chord),
+                             .init(.pointerUp(0), modifiers: chord)]),
+            (.otherAction, [flags(chord), .init(.otherAction, modifiers: chord)]),
+            (.otherKey, [down(0, []), flags(chord), up(0, chord)]),
+        ]
+        for (reason, events) in cases {
+            var recognizer = ShortcutRecognizer(shortcut: .default)
+            for event in events { #expect(recognizer.handle(event) == false) }
+            #expect(recognizer.handle(flags([])) == false)
+            #expect(recognizer.lastCancellationReason == reason)
+        }
+    }
+
+    @Test func testOrdinaryTypingAndPointerActionsDoNotReportShortcutAttempts() {
+        var recognizer = ShortcutRecognizer(shortcut: .default)
+        let events = [down(0, []), up(0, []), flags(.shift), down(1, .shift), up(1, .shift),
+                      flags([]), flags(.control), down(8, .control), up(8, .control), flags([]),
+                      .init(.pointerDown(0), modifiers: []), .init(.pointerUp(0), modifiers: []),
+                      .init(.otherAction, modifiers: [])]
+        for event in events {
+            #expect(recognizer.handle(event) == false)
+            #expect(recognizer.lastCancellationReason == nil)
+        }
+    }
+
+    @Test func testInterruptedChordReportsHeldStateAndResetClearsTheReport() {
+        var recognizer = ShortcutRecognizer(shortcut: .default)
+        recognizer.reset(modifiers: chord)
+        #expect(recognizer.handle(flags(.control)) == false)
+        #expect(recognizer.lastCancellationReason == .heldAtReset)
+        recognizer.reset()
+        #expect(recognizer.lastCancellationReason == nil)
+        #expect(recognizer.handle(flags(chord)) == false)
+        #expect(recognizer.handle(flags([])) == true)
+    }
+
+    @Test func testOrdinaryKeyShortcutReportsCancellationOnItsFirstRelease() {
+        let shortcut = Shortcut(modifiers: .option, keyCode: 49)
+        var recognizer = ShortcutRecognizer(shortcut: shortcut)
+        for event in [flags(.option), down(49, .option), down(0, .option), up(0, .option)] {
+            #expect(recognizer.handle(event) == false)
+            #expect(recognizer.lastCancellationReason == nil)
+        }
+        #expect(recognizer.handle(up(49, .option)) == false)
+        #expect(recognizer.lastCancellationReason == .otherKey)
+        #expect(recognizer.handle(flags([])) == false)
+        #expect(recognizer.lastCancellationReason == nil)
+    }
+
     @Test func testShortcutSerializationAndPhysicalKeyName() throws {
         let shortcut = Shortcut(modifiers: [.control, .option], keyCode: 49)
         #expect(try JSONDecoder().decode(Shortcut.self, from: JSONEncoder().encode(shortcut)) == shortcut)

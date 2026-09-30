@@ -11,6 +11,9 @@ enum LayoutSwitchApp {
             let sources = InputSourceManager()
             sources.refresh()
             let result: [String: Any] = [
+                "appVersion": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "development",
+                "appBuild": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "",
+                "diagnosticsVersion": 2,
                 "inputMonitoringGranted": CGPreflightListenEventAccess(),
                 "secureInputEnabled": IsSecureEventInputEnabled(),
                 "currentSourceID": sources.currentID ?? "",

@@ -20,19 +20,21 @@ extension Modifiers {
 final class KeyboardMonitor {
     static let modifierCodes: Set<UInt16> = [54, 55, 56, 58, 59, 60, 61, 62]
     private static let latencyLog = Logger(subsystem: "local.masos.LayoutSwitch", category: "SwitchLatency")
+    private static let shortcutLog = Logger(subsystem: "local.masos.LayoutSwitch", category: "Shortcut")
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
-    private var recognizer = ShortcutRecognizer(shortcut: .default)
+    private var recognizer = ShortcutGroupRecognizer(shortcuts: [.default])
     private var functionDown = false
     private var generation = 0
-    var onTrigger: (() -> Void)?
+    var onTrigger: (() -> LayoutSwitchTimings?)?
     var onInterruption: (() -> Void)?
     var isRunning: Bool { tap.map { CGEvent.tapIsEnabled(tap: $0) } ?? false }
 
-    func start(shortcut: Shortcut) -> Bool {
+    func start(shortcuts: [Shortcut]) -> Bool {
         stop()
+        guard !Shortcut.normalized(shortcuts).isEmpty else { return false }
         guard CGPreflightListenEventAccess(), !IsSecureEventInputEnabled() else { return false }
-        recognizer = ShortcutRecognizer(shortcut: shortcut)
+        recognizer = ShortcutGroupRecognizer(shortcuts: shortcuts)
         resetGesture()
         let types: [CGEventType] = [
             .flagsChanged, .keyDown, .keyUp, .leftMouseDown, .leftMouseUp,
@@ -93,6 +95,8 @@ final class KeyboardMonitor {
 
     private func receive(type: CGEventType, event: CGEvent) {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            let reason = type == .tapDisabledByTimeout ? "timeout" : "userInput"
+            Self.latencyLog.notice("Keyboard tap interrupted: \(reason, privacy: .public)")
             resetGesture()
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
             onInterruption?()
@@ -119,7 +123,12 @@ final class KeyboardMonitor {
             kind = .otherAction
         }
         let modifiers = Modifiers(cgFlags: event.flags, functionDown: functionDown)
-        if recognizer.handle(ShortcutEvent(kind, modifiers: modifiers)) {
+        let triggered = recognizer.handle(ShortcutEvent(kind, modifiers: modifiers))
+        for reason in recognizer.lastCancellationReasons {
+            Self.shortcutLog.notice("Shortcut cancelled: \(reason.rawValue, privacy: .public)")
+        }
+        if triggered {
+            Self.shortcutLog.notice("Shortcut recognized")
             // Input source selection can involve IPC. Keep it outside the tap.
             // Common modes also run while our menu or a modal loop is active.
             let expectedGeneration = generation
@@ -128,16 +137,38 @@ final class KeyboardMonitor {
             let eventAt = eventTime > 0 ? min(eventTime, receivedAt) : receivedAt
             CFRunLoopPerformBlock(CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue) { [weak self] in
                 MainActor.assumeIsolated {
-                    guard let self, self.generation == expectedGeneration,
-                          self.isRunning, !IsSecureEventInputEnabled() else { return }
+                    guard let self else { return }
+                    guard self.generation == expectedGeneration else {
+                        Self.shortcutLog.notice("Queued switch cancelled: monitoring changed")
+                        return
+                    }
+                    guard self.isRunning else {
+                        Self.shortcutLog.notice("Queued switch cancelled: monitoring stopped")
+                        return
+                    }
+                    guard !IsSecureEventInputEnabled() else {
+                        Self.shortcutLog.notice("Queued switch cancelled: secure input")
+                        return
+                    }
                     let startedAt = DispatchTime.now().uptimeNanoseconds
-                    self.onTrigger?()
+                    let timings = self.onTrigger?()
                     let finishedAt = DispatchTime.now().uptimeNanoseconds
+                    if let timings {
+                        let outcome = timings.inputSource.outcome.rawValue
+                        let code = timings.inputSource.statusCode.map { String($0) } ?? "none"
+                        Self.shortcutLog.notice("Shortcut handled: outcome=\(outcome, privacy: .public), status=\(code, privacy: .public)")
+                    } else {
+                        Self.shortcutLog.notice("Shortcut handler skipped switching")
+                    }
                     if finishedAt - eventAt >= 100_000_000 {
                         let deliveryMS = Double(receivedAt - eventAt) / 1_000_000
                         let queueMS = Double(startedAt - receivedAt) / 1_000_000
                         let switchMS = Double(finishedAt - startedAt) / 1_000_000
                         Self.latencyLog.notice("Slow layout switch: delivery=\(deliveryMS, privacy: .public) ms, queue=\(queueMS, privacy: .public) ms, switch=\(switchMS, privacy: .public) ms")
+                        if let timings {
+                            let source = timings.inputSource
+                            Self.latencyLog.notice("Switch phases: readCurrent=\(source.readCurrentMS, privacy: .public) ms, prepare=\(source.prepareMS, privacy: .public) ms, select=\(source.selectMS, privacy: .public) ms, confirm=\(source.confirmMS, privacy: .public) ms, publish=\(timings.publishMS, privacy: .public) ms")
+                        }
                     }
                 }
             }

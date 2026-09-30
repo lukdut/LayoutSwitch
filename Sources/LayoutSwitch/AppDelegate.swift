@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private let model = AppModel()
     private var statusItem: NSStatusItem!
     private var settingsWindow: NSWindow?
+    private var statusSymbol: String?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // A second copy would receive the same gesture and switch twice.
@@ -21,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         NSApp.setActivationPolicy(.accessory)
         configureApplicationMenu()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem.button?.imagePosition = .imageLeading
         let menu = NSMenu()
         menu.autoenablesItems = false
         menu.delegate = self
@@ -45,7 +47,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         menu.removeAllItems()
         addItem(model.status.title, to: menu)
         addItem("Раскладка: \(model.currentSource?.name ?? "не определена")", to: menu)
-        addItem("Сочетание: \(model.settings.shortcut.displayName)", to: menu)
+        for shortcut in model.settings.shortcuts {
+            addItem("Сочетание: \(shortcut.displayName)", to: menu)
+        }
         if !model.canSwitch { addItem("Выберите хотя бы две раскладки", to: menu) }
         if let error = model.errorMessage { addItem(error, to: menu) }
         menu.addItem(.separator())
@@ -92,12 +96,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         case .paused, .recording: symbol = "pause.circle"
         default: symbol = "keyboard.badge.ellipsis"
         }
-        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: "LayoutSwitch")
-            ?? NSImage(systemSymbolName: "keyboard", accessibilityDescription: "LayoutSwitch")
-        button.image?.isTemplate = true
-        button.imagePosition = .imageLeading
-        button.title = " \(model.currentSource?.badge ?? "—")"
-        button.toolTip = "LayoutSwitch · \(model.status.title) · \(model.settings.shortcut.displayName)"
+        if statusSymbol != symbol {
+            statusSymbol = symbol
+            button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: "LayoutSwitch")
+                ?? NSImage(systemSymbolName: "keyboard", accessibilityDescription: "LayoutSwitch")
+            button.image?.isTemplate = true
+        }
+        let title = " \(model.currentSource?.badge ?? "—")"
+        if button.title != title { button.title = title }
+        let toolTip = "LayoutSwitch · \(model.status.title) · \(model.shortcutSummary)"
+        if button.toolTip != toolTip { button.toolTip = toolTip }
     }
 
     @discardableResult

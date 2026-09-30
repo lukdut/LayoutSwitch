@@ -19,6 +19,8 @@ struct InputSourceManagerTests {
         #expect(manager.currentID == "en")
         #expect(backend.selections == ["ru", "en"])
         #expect(backend.loadCount == 1)
+        #expect(manager.lastSelectionTimings.outcome == .confirmed)
+        #expect(manager.lastSelectionTimings.statusCode == noErr)
     }
 
     @Test func firstSwitchLoadsSourcesIfNeeded() {
@@ -114,11 +116,44 @@ struct InputSourceManagerTests {
         #expect(backend.loadCount == 2)
         #expect(backend.selections == ["ru"])
         #expect(manager.currentID == "en")
+        #expect(manager.lastSelectionTimings.outcome == .failed)
+        #expect(manager.lastSelectionTimings.statusCode == OSStatus(paramErr))
 
         backend.selectionStatus = noErr
         #expect(manager.selectNext(selectedIDs: nil) == nil)
         #expect(manager.currentID == "ru")
         #expect(backend.loadCount == 2)
+        #expect(manager.lastSelectionTimings.outcome == .confirmed)
+        #expect(manager.lastSelectionTimings.statusCode == noErr)
+    }
+
+    @Test func unconfirmedSelectionIsReportedWithoutRetryingOrAssumingSuccess() {
+        let backend = FakeInputSourceBackend(sources: [source("en"), source("ru")], currentID: "en")
+        backend.appliesSelection = false
+        let manager = InputSourceManager(backend: backend)
+        manager.refresh()
+
+        #expect(manager.selectNext(selectedIDs: nil) == nil)
+        #expect(manager.lastSelectionTimings.outcome == .unconfirmed)
+        #expect(manager.lastSelectionTimings.statusCode == noErr)
+        #expect(manager.currentID == "en")
+        #expect(backend.selections == ["ru"])
+
+        backend.currentID = "ru"
+        manager.refreshCurrent()
+        #expect(manager.currentID == "ru")
+    }
+
+    @Test func unavailableSelectionDoesNotReuseAnEarlierSuccessfulResult() {
+        let backend = FakeInputSourceBackend(sources: [source("en"), source("ru")], currentID: "en")
+        let manager = InputSourceManager(backend: backend)
+        manager.refresh()
+        #expect(manager.selectNext(selectedIDs: nil) == nil)
+
+        #expect(manager.selectNext(selectedIDs: []) != nil)
+        #expect(manager.lastSelectionTimings.outcome == .unavailable)
+        #expect(manager.lastSelectionTimings.statusCode == nil)
+        #expect(backend.selections == ["ru"])
     }
 
     @Test func emptyOrSingleSelectionNeverSwitches() {
@@ -139,6 +174,7 @@ private final class FakeInputSourceBackend: InputSourceBackend {
     var sources: [InputSource]
     var currentID: String?
     var selectionStatus: OSStatus = noErr
+    var appliesSelection = true
     private(set) var loadCount = 0
     private(set) var selections: [String] = []
 
@@ -159,7 +195,7 @@ private final class FakeInputSourceBackend: InputSourceBackend {
         selections.append(id)
         guard selectionStatus == noErr else { return selectionStatus }
         guard isSelectable(id) else { return OSStatus(paramErr) }
-        currentID = id
+        if appliesSelection { currentID = id }
         return noErr
     }
 }

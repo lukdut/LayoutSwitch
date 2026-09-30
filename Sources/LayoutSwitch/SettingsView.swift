@@ -64,7 +64,8 @@ struct SettingsView: View {
                 Image(systemName: "hand.raised")
                 Text("Работает локально. Набранный текст не читается и не сохраняется.")
                 Spacer()
-                Text("1.0").monospacedDigit()
+                Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Dev")
+                    .monospacedDigit()
             }
             .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 24).padding(.vertical, 12)
         }
@@ -90,37 +91,69 @@ struct SettingsView: View {
     private var shortcutSection: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 14) {
-                HStack {
-                    Text(model.isRecording ? "Нажмите сочетание…" : model.settings.shortcut.displayName)
-                        .font(.system(size: model.isRecording ? 19 : 29, weight: .medium, design: .rounded))
-                        .frame(maxWidth: .infinity, minHeight: 65)
-                        .background(accent.opacity(0.07), in: RoundedRectangle(cornerRadius: 10))
-                        .accessibilityLabel("Текущее сочетание")
-                        .accessibilityValue(model.settings.shortcut.displayName)
-                    if model.isRecording {
-                        Button("Отмена", action: model.cancelRecording)
-                    } else {
-                        Button("Записать…", action: model.startRecording)
+                ForEach(model.settings.shortcuts, id: \.self) { shortcut in
+                    HStack(spacing: 10) {
+                        Text(shortcut.displayName)
+                            .font(.system(size: 23, weight: .medium, design: .rounded))
+                            .frame(maxWidth: .infinity, minHeight: 46, alignment: .leading)
+                            .padding(.horizontal, 12)
+                            .background(accent.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
+                            .accessibilityLabel("Сочетание")
+                            .accessibilityValue(shortcut.displayName)
+                        Button("Изменить…") { model.startRecording(replacing: shortcut) }
+                            .disabled(model.isRecording)
+                        Button { model.removeShortcut(shortcut) } label: {
+                            Image(systemName: "trash")
+                        }
+                        .disabled(model.isRecording || model.settings.shortcuts.count == 1)
+                        .help("Удалить сочетание")
+                        .accessibilityLabel("Удалить сочетание \(shortcut.displayName)")
                     }
                 }
                 if model.isRecording {
-                    Text(model.recordingHint).font(.callout).foregroundStyle(accent)
-                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(model.recordingShortcut.map { "Замена \($0.displayName)" } ?? "Новое сочетание")
+                                .font(.caption).foregroundStyle(.secondary)
+                            Text("Нажмите сочетание…").font(.headline)
+                            Text(model.recordingHint).font(.callout).foregroundStyle(accent)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer()
+                        Button("Отмена", action: model.cancelRecording)
+                    }
+                    .padding(12)
+                    .background(accent.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
                 } else {
+                    HStack {
+                        Button { model.startRecording() } label: {
+                            Label("Добавить сочетание…", systemImage: "plus")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        Spacer()
+                        Button("Оставить только Ctrl + Shift", action: model.restoreDefaultShortcut)
+                            .disabled(model.settings.shortcuts == [.default])
+                    }
+                }
+                if let error = model.shortcutError {
+                    Label(error, systemImage: "exclamationmark.circle")
+                        .font(.callout).foregroundStyle(.orange)
+                }
+                if !model.isRecording {
+                    Text("Любое из этих сочетаний переключает раскладки по одному и тому же кругу.")
+                        .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     Text("Два или больше модификаторов: Ctrl, Shift, Option, Command. Либо модификатор с одной обычной клавишей. Левые и правые клавиши равнозначны.")
                         .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     Text("Срабатывает при отпускании любой клавиши сочетания. Можно удерживать остальные и повторно нажимать и отпускать одну клавишу. Дополнительная клавиша или действие мышью до отпускания отменяют переключение.")
                         .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                    if model.settings.shortcut.keyCode != nil {
+                    if model.settings.shortcuts.contains(where: { $0.keyCode != nil }) {
                         Label("Сочетание также получит активное приложение. Выберите свободное сочетание. Буквы обозначают физические клавиши английской раскладки.", systemImage: "info.circle")
                             .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     }
-                    Button("Вернуть Ctrl + Shift", action: model.restoreDefaultShortcut)
-                        .font(.callout).disabled(model.settings.shortcut == .default)
                 }
             }.padding(8)
         } label: {
-            Label("Сочетание клавиш", systemImage: "command").font(.headline)
+            Label("Сочетания клавиш", systemImage: "command").font(.headline)
         }
     }
 
