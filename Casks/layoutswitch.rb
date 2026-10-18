@@ -1,10 +1,10 @@
 cask "layoutswitch" do
-  version "1.1.0"
-  sha256 "fa76d54b9e22ee08cdd49b601de1bc93e1f7d2f2dd1407c31e8f571cc437b032"
+  version "1.2.1"
+  sha256 "381ab82013fda917443018accda7fa4be7984f5d098e80b372f1474b6a33ffed"
 
   url "https://github.com/lukdut/LayoutSwitch/releases/download/v#{version}/LayoutSwitch-#{version}-macos-arm64.zip"
   name "LayoutSwitch"
-  desc "Switch keyboard layouts with a custom shortcut"
+  desc "Switch keyboard layouts with configurable shortcuts"
   homepage "https://github.com/lukdut/LayoutSwitch"
 
   depends_on arch: :arm64

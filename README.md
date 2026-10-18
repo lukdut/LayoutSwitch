@@ -28,7 +28,7 @@ brew upgrade --cask lukdut/layoutswitch/layoutswitch
 
 ## Download
 
-Download [LayoutSwitch 1.1.0 for Apple Silicon](https://github.com/lukdut/LayoutSwitch/releases/download/v1.1.0/LayoutSwitch-1.1.0-macos-arm64.zip) from the [release page](https://github.com/lukdut/LayoutSwitch/releases/tag/v1.1.0), extract the archive, and move `LayoutSwitch.app` to `/Applications`. Requires macOS 13 or later. The app interface in version 1.1.0 is in Russian.
+Download [LayoutSwitch 1.2.1 for Apple Silicon](https://github.com/lukdut/LayoutSwitch/releases/download/v1.2.1/LayoutSwitch-1.2.1-macos-arm64.zip) from the [release page](https://github.com/lukdut/LayoutSwitch/releases/tag/v1.2.1), extract the archive, and move `LayoutSwitch.app` to `/Applications`. Requires macOS 13 or later. The app interface in version 1.2.1 is in Russian.
 
 The prebuilt app is for **Apple Silicon (arm64)**. On an Intel Mac, build from source using the instructions below. The release also includes `SHA256SUMS.txt` to verify the archive:
 
@@ -110,7 +110,7 @@ Caps Lock and Fn cannot be assigned as shortcuts. An already enabled Caps Lock d
 - **Secure Input.** Monitoring may be unavailable during protected input, such as Terminal's Secure Keyboard Entry. The app displays this state and resumes when it ends. Keep the standard macOS input source shortcut as a fallback.
 - **Complex input methods.** The app selects enabled, selectable sources, including IME modes. Finish composing Chinese or Japanese characters before switching: handling of unfinished composition depends on the input method and macOS version. This version has no special composition handling.
 - **System shortcut conflicts.** A shortcut reserved by macOS may perform a system action or never reach the app. Choose another combination when recording.
-- **Local signing.** The build script uses an ad hoc signature by default. For more stable trust across rebuilds, use `CODESIGN_IDENTITY="your certificate name" ./scripts/build.sh`. Rebuilding, moving the app, or changing its signature may require granting permission again. The script does not automatically perform Developer ID signing or notarization. The downloadable 1.1.0 archive also uses an ad hoc signature.
+- **Local signing.** The build script uses an ad hoc signature by default. For more stable trust across rebuilds, use `CODESIGN_IDENTITY="your certificate name" ./scripts/build.sh`. Rebuilding, moving the app, or changing its signature may require granting permission again. The script does not automatically perform Developer ID signing or notarization. The downloadable 1.2.1 archive also uses an ad hoc signature.
 - **One running copy.** A second process with the same bundle ID exits so that one gesture does not switch layouts twice.
 
 ## Development and verification
