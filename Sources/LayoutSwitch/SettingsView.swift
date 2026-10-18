@@ -144,7 +144,7 @@ struct SettingsView: View {
                         .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     Text("Два или больше модификаторов: Ctrl, Shift, Option, Command. Либо модификатор с одной обычной клавишей. Левые и правые клавиши равнозначны.")
                         .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                    Text("Срабатывает при отпускании любой клавиши сочетания. Можно удерживать остальные и повторно нажимать и отпускать одну клавишу. Дополнительная клавиша или действие мышью до отпускания отменяют переключение.")
+                    Text("Срабатывает при отпускании любой клавиши сочетания. Можно удерживать остальные и повторно нажимать и отпускать одну клавишу. Зажатая буква от предыдущего набора не мешает переключению. Новая посторонняя клавиша или действие мышью во время сочетания отменяют переключение.")
                         .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     if model.settings.shortcuts.contains(where: { $0.keyCode != nil }) {
                         Label("Сочетание также получит активное приложение. Выберите свободное сочетание. Буквы обозначают физические клавиши английской раскладки.", systemImage: "info.circle")

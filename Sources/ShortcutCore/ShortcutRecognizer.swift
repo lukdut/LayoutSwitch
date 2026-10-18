@@ -18,6 +18,7 @@ public struct ShortcutEvent: Sendable {
 
 /// A complete chord triggers once when any of its keys is released.
 /// Completing it again rearms the shortcut while other keys remain held.
+/// Keys from preceding plain or Shift-only typing may overlap the chord.
 /// No event is suppressed. A conflict blocks switching until all keys are up.
 public struct ShortcutRecognizer {
     public enum CancellationReason: String, Sendable {
@@ -29,19 +30,22 @@ public struct ShortcutRecognizer {
     public private(set) var lastCancellationReason: CancellationReason?
     private var modifiers: Modifiers = []
     private var keysDown: Set<UInt16> = []
+    private var precedingKeysDown: Set<UInt16> = []
+    private var acceptingTyping = true
     private var buttonsDown: Set<Int> = []
     private var armed = false
     private var waitingForChordRelease = false
     private var cancellationReason: CancellationReason?
     private var attempted = false
     private var cancelled: Bool { cancellationReason != nil }
+    private var shortcutKeysDown: Set<UInt16> { keysDown.subtracting(precedingKeysDown) }
     private var shortcutKeysHeld: Bool {
         modifiers.isSuperset(of: shortcut.modifiers) &&
-            (shortcut.keyCode.map { keysDown.contains($0) } ?? true)
+            (shortcut.keyCode.map { shortcutKeysDown.contains($0) } ?? true)
     }
     private var chordHeld: Bool {
         modifiers == shortcut.modifiers &&
-            (shortcut.keyCode.map { keysDown == [$0] } ?? keysDown.isEmpty)
+            (shortcut.keyCode.map { shortcutKeysDown == [$0] } ?? shortcutKeysDown.isEmpty)
     }
 
     public init(shortcut: Shortcut) { self.shortcut = shortcut }
@@ -53,10 +57,12 @@ public struct ShortcutRecognizer {
     ) {
         self.modifiers = modifiers
         self.keysDown = keysDown
+        precedingKeysDown.removeAll()
         self.buttonsDown = buttonsDown
         armed = false
         waitingForChordRelease = false
         cancellationReason = !modifiers.isEmpty || !keysDown.isEmpty || !buttonsDown.isEmpty ? .heldAtReset : nil
+        acceptingTyping = !cancelled
         attempted = shortcut.isValid && shortcutKeysHeld
         lastCancellationReason = nil
     }
@@ -69,7 +75,12 @@ public struct ShortcutRecognizer {
         attempted = false
         lastCancellationReason = nil
         waitingForChordRelease = chordHeld
-        let matchingKeys = shortcut.keyCode.map { keysDown.isSubset(of: [$0]) } ?? keysDown.isEmpty
+        if acceptingTyping { return }
+        if modifiers.isEmpty && shortcutKeysDown.isEmpty && buttonsDown.isEmpty {
+            resumeTyping()
+            return
+        }
+        let matchingKeys = shortcut.keyCode.map { shortcutKeysDown.isSubset(of: [$0]) } ?? shortcutKeysDown.isEmpty
         cancellationReason = !modifiers.subtracting(shortcut.modifiers).isEmpty ||
             !matchingKeys || !buttonsDown.isEmpty ? .heldAtReset : nil
     }
@@ -79,7 +90,14 @@ public struct ShortcutRecognizer {
         lastCancellationReason = nil
         modifiers = event.modifiers
 
-        if !modifiers.subtracting(shortcut.modifiers).isEmpty { cancel(.extraModifier) }
+        // Shift alone is also used for typing. For a Shift + key shortcut,
+        // Shift itself starts the gesture, so its key must still follow it.
+        let typingModifiers = modifiers.isEmpty || (modifiers == .shift && shortcut.modifiers != .shift)
+        if acceptingTyping && !typingModifiers {
+            precedingKeysDown = keysDown
+            acceptingTyping = false
+        }
+        if !acceptingTyping && !modifiers.subtracting(shortcut.modifiers).isEmpty { cancel(.extraModifier) }
 
         switch event.kind {
         case .modifiersChanged:
@@ -87,14 +105,22 @@ public struct ShortcutRecognizer {
         case let .keyDown(code, isRepeat):
             let alreadyDown = keysDown.contains(code)
             keysDown.insert(code)
+            if acceptingTyping {
+                if !KeyNames.typingKeyCodes.contains(code) { cancel(.otherKey) }
+                break
+            }
+            // A fresh keyDown (including auto-repeat) under shortcut modifiers
+            // is an application action, even if this key began as plain typing.
+            if precedingKeysDown.contains(code) { cancel(.otherKey); break }
             if isRepeat && alreadyDown { break }
             if code != shortcut.keyCode || modifiers != shortcut.modifiers ||
-                keysDown.count != 1 || isRepeat {
+                shortcutKeysDown.count != 1 || isRepeat {
                 cancel(.otherKey)
             }
         case let .keyUp(code):
             if !keysDown.contains(code) { cancel(.unexpectedKeyRelease) }
             keysDown.remove(code)
+            precedingKeysDown.remove(code)
         case let .pointerDown(button):
             buttonsDown.insert(button)
             cancel(.pointerAction)
@@ -112,11 +138,25 @@ public struct ShortcutRecognizer {
         armed = chordHeld && !cancelled && !waitingForChordRelease
         if !chordHeld { waitingForChordRelease = false }
         if modifiers.isEmpty && keysDown.isEmpty && buttonsDown.isEmpty { reset() }
+        else if !cancelled && !acceptingTyping && modifiers.isEmpty && shortcutKeysDown.isEmpty && buttonsDown.isEmpty {
+            resumeTyping()
+        }
         lastCancellationReason = rejectedBecause
         return shouldSwitch
     }
 
     private mutating func cancel(_ reason: CancellationReason) {
+        acceptingTyping = false
         if cancellationReason == nil { cancellationReason = reason }
+    }
+
+    private mutating func resumeTyping() {
+        // Retain actual held keys so their later keyUp is still recognized.
+        precedingKeysDown.removeAll()
+        acceptingTyping = true
+        cancellationReason = nil
+        armed = false
+        waitingForChordRelease = false
+        attempted = false
     }
 }

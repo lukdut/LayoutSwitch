@@ -52,6 +52,11 @@ public struct Shortcut: Codable, Hashable, Sendable {
 public enum KeyNames {
     public static func name(for code: UInt16) -> String { names[code] ?? "Key \(code)" }
 
+    // Printable physical keys and Backspace can belong to preceding typing.
+    // Keep navigation, Return, Tab, Escape and function keys as conflicts.
+    static let typingKeyCodes: Set<UInt16> = Set(UInt16(0)...50).subtracting([36, 48])
+        .union([51, 65, 67, 69, 75, 78, 81, 82, 83, 84, 85, 86, 87, 88, 89, 91, 92])
+
     public static let names: [UInt16: String] = [
         0: "A", 1: "S", 2: "D", 3: "F", 4: "H", 5: "G", 6: "Z", 7: "X",
         8: "C", 9: "V", 10: "§", 11: "B", 12: "Q", 13: "W", 14: "E", 15: "R",

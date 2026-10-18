@@ -47,8 +47,8 @@ struct ShortcutRecognizerTests {
                          flags(chord), flags(.control), flags([])]) == [1, 8])
     }
 
-    @Test func testKeyHeldBeforeModifiersCancels() {
-        #expect(switches([down(0, []), flags(.control), flags(chord), up(0, chord), flags([])]) == [])
+    @Test func testKeyFromPreviousTypingDoesNotCancel() {
+        #expect(switches([down(0, []), flags(.control), flags(chord), up(0, chord), flags([])]) == [4])
     }
 
     @Test func testEarlierShortcutUseCancelsEntireGesture() {
@@ -229,7 +229,7 @@ struct ShortcutRecognizerTests {
             (.pointerAction, [flags(chord), .init(.pointerDown(0), modifiers: chord),
                              .init(.pointerUp(0), modifiers: chord)]),
             (.otherAction, [flags(chord), .init(.otherAction, modifiers: chord)]),
-            (.otherKey, [down(0, []), flags(chord), up(0, chord)]),
+            (.otherKey, [flags(chord), down(0, chord), up(0, chord)]),
         ]
         for (reason, events) in cases {
             var recognizer = ShortcutRecognizer(shortcut: .default)
