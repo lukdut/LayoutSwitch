@@ -19,7 +19,8 @@ public struct ShortcutEvent: Sendable {
 /// A complete chord triggers once when any of its keys is released.
 /// Completing it again rearms the shortcut while other keys remain held.
 /// Keys from preceding plain or Shift-only typing may overlap the chord.
-/// No event is suppressed. A conflict blocks switching until all keys are up.
+/// No event is suppressed. A conflict blocks switching until the gesture's
+/// modifiers, keys and buttons are up; preceding typing need not be released.
 public struct ShortcutRecognizer {
     public enum CancellationReason: String, Sendable {
         case heldAtReset, extraModifier, otherKey, unexpectedKeyRelease, pointerAction, otherAction
@@ -38,6 +39,11 @@ public struct ShortcutRecognizer {
     private var cancellationReason: CancellationReason?
     private var attempted = false
     private var cancelled: Bool { cancellationReason != nil }
+    // Shift alone is also used for typing. For a Shift + key shortcut,
+    // Shift itself starts the gesture, so its key must still follow it.
+    private var onlyTypingModifiersHeld: Bool {
+        modifiers.isEmpty || (modifiers == .shift && shortcut.modifiers != .shift)
+    }
     private var shortcutKeysDown: Set<UInt16> { keysDown.subtracting(precedingKeysDown) }
     private var shortcutKeysHeld: Bool {
         modifiers.isSuperset(of: shortcut.modifiers) &&
@@ -76,7 +82,7 @@ public struct ShortcutRecognizer {
         lastCancellationReason = nil
         waitingForChordRelease = chordHeld
         if acceptingTyping { return }
-        if modifiers.isEmpty && shortcutKeysDown.isEmpty && buttonsDown.isEmpty {
+        if onlyTypingModifiersHeld && shortcutKeysDown.isEmpty && buttonsDown.isEmpty {
             resumeTyping()
             return
         }
@@ -90,10 +96,7 @@ public struct ShortcutRecognizer {
         lastCancellationReason = nil
         modifiers = event.modifiers
 
-        // Shift alone is also used for typing. For a Shift + key shortcut,
-        // Shift itself starts the gesture, so its key must still follow it.
-        let typingModifiers = modifiers.isEmpty || (modifiers == .shift && shortcut.modifiers != .shift)
-        if acceptingTyping && !typingModifiers {
+        if acceptingTyping && !onlyTypingModifiersHeld {
             precedingKeysDown = keysDown
             acceptingTyping = false
         }
@@ -109,9 +112,14 @@ public struct ShortcutRecognizer {
                 if !KeyNames.typingKeyCodes.contains(code) { cancel(.otherKey) }
                 break
             }
-            // A fresh keyDown (including auto-repeat) under shortcut modifiers
-            // is an application action, even if this key began as plain typing.
-            if precedingKeysDown.contains(code) { cancel(.otherKey); break }
+            if precedingKeysDown.contains(code) {
+                // Holding Backspace while moving into a layout shortcut keeps
+                // generating repeats. They belong to the preceding deletion,
+                // not a new shortcut action. A fresh press still conflicts.
+                if code == 51 && isRepeat && alreadyDown { break }
+                cancel(.otherKey)
+                break
+            }
             if isRepeat && alreadyDown { break }
             if code != shortcut.keyCode || modifiers != shortcut.modifiers ||
                 shortcutKeysDown.count != 1 || isRepeat {
@@ -138,7 +146,11 @@ public struct ShortcutRecognizer {
         armed = chordHeld && !cancelled && !waitingForChordRelease
         if !chordHeld { waitingForChordRelease = false }
         if modifiers.isEmpty && keysDown.isEmpty && buttonsDown.isEmpty { reset() }
-        else if !cancelled && !acceptingTyping && modifiers.isEmpty && shortcutKeysDown.isEmpty && buttonsDown.isEmpty {
+        else if !acceptingTyping && shortcutKeysDown.isEmpty && buttonsDown.isEmpty &&
+            (modifiers.isEmpty || (!cancelled && onlyTypingModifiersHeld)) {
+            // A clean gesture may return to Shift-only typing. A cancelled one
+            // must release every modifier, but neither needs to wait for keys
+            // that were already held before it began.
             resumeTyping()
         }
         lastCancellationReason = rejectedBecause

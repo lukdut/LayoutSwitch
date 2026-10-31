@@ -28,7 +28,7 @@ brew upgrade --cask lukdut/layoutswitch/layoutswitch
 
 ## Download
 
-Download [LayoutSwitch 1.2.1 for Apple Silicon](https://github.com/lukdut/LayoutSwitch/releases/download/v1.2.1/LayoutSwitch-1.2.1-macos-arm64.zip) from the [release page](https://github.com/lukdut/LayoutSwitch/releases/tag/v1.2.1), extract the archive, and move `LayoutSwitch.app` to `/Applications`. Requires macOS 13 or later. The app interface in version 1.2.1 is in Russian.
+Download [LayoutSwitch 1.2.2 for Apple Silicon](https://github.com/lukdut/LayoutSwitch/releases/download/v1.2.2/LayoutSwitch-1.2.2-macos-arm64.zip) from the [release page](https://github.com/lukdut/LayoutSwitch/releases/tag/v1.2.2), extract the archive, and move `LayoutSwitch.app` to `/Applications`. Requires macOS 13 or later. The app interface in version 1.2.2 is in Russian.
 
 The prebuilt app is for **Apple Silicon (arm64)**. On an Intel Mac, build from source using the instructions below. The release also includes `SHA256SUMS.txt` to verify the archive:
 
@@ -99,9 +99,11 @@ The ad hoc signature changes when the app is rebuilt. macOS may require permissi
 
 With overlapping shortcuts, such as Ctrl + Shift and Ctrl + Shift + Space, completing the larger chord switches once. Releasing its remaining keys does not trigger the smaller chord. After a successful switch, you can use another configured shortcut while holding a shared modifier.
 
-During fast typing, printable keys, Space, and Backspace pressed without modifiers or with Shift alone before the shortcut starts may remain held. They neither block switching nor count as the shortcut's own key. A gesture starts with Ctrl, Option, or Command; for a Shift + key shortcut, it starts with Shift. A new unrelated key press or auto-repeat after that point cancels switching. Arrow keys, Return, Tab, Escape, and function keys do not count as preceding typing. Keys held at startup or when monitoring resumes must still be released first.
+During fast typing, printable keys, Space, and Backspace pressed without modifiers or with Shift alone before the shortcut starts may remain held. They neither block switching nor count as the shortcut's own key. A gesture starts with Ctrl, Option, or Command; for a Shift + key shortcut, it starts with Shift. Auto-repeat from Delete / Backspace (⌫) held before the gesture also does not block switching. A fresh unrelated key press after the gesture starts, including Delete, and repeats of other unrelated keys still cancel the attempt. Events continue to reach the active app, including Delete repeats with the current modifiers. Arrow keys, Return, Tab, Escape, and function keys do not count as preceding typing. Keys held at startup or when monitoring resumes must still be released first.
 
-To switch again, complete the chord again and release any of its keys. After a cancelled gesture, release all keys before trying again. An unrelated key or mouse action after a switch also blocks further switches until everything is released. Keyboard events are not suppressed globally. If you configure a shortcut with a regular key, the active app also receives it, so choose an unused combination. Letters shown during recording refer to **physical English keyboard positions**, regardless of the current input language.
+To switch again, complete the chord again and release any of its keys. After a successful switch, if only Shift remains held, you can type a capital letter and use the shortcut again without releasing Shift. This applies once the shortcut's regular key, if any, is released; Shift + key shortcuts still treat Shift as the start of the gesture. New unrelated keys pressed while Ctrl, Option, or Command remains held, and mouse actions during a gesture, still cancel switching.
+
+After a cancelled gesture, release all modifiers, the shortcut's own and conflicting keys, and mouse buttons before trying again. Keys from preceding typing may remain held. Keyboard events are not suppressed globally. If you configure a shortcut with a regular key, the active app also receives it, so choose an unused combination. Letters shown during recording refer to **physical English keyboard positions**, regardless of the current input language.
 
 Caps Lock and Fn cannot be assigned as shortcuts. An already enabled Caps Lock does not interfere; pressing Caps Lock before releasing a shortcut key cancels switching. F1–F16 can be recorded when the keyboard sends regular function keys without holding Fn. Media keys are not supported.
 
@@ -110,7 +112,7 @@ Caps Lock and Fn cannot be assigned as shortcuts. An already enabled Caps Lock d
 - **Secure Input.** Monitoring may be unavailable during protected input, such as Terminal's Secure Keyboard Entry. The app displays this state and resumes when it ends. Keep the standard macOS input source shortcut as a fallback.
 - **Complex input methods.** The app selects enabled, selectable sources, including IME modes. Finish composing Chinese or Japanese characters before switching: handling of unfinished composition depends on the input method and macOS version. This version has no special composition handling.
 - **System shortcut conflicts.** A shortcut reserved by macOS may perform a system action or never reach the app. Choose another combination when recording.
-- **Local signing.** The build script uses an ad hoc signature by default. For more stable trust across rebuilds, use `CODESIGN_IDENTITY="your certificate name" ./scripts/build.sh`. Rebuilding, moving the app, or changing its signature may require granting permission again. The script does not automatically perform Developer ID signing or notarization. The downloadable 1.2.1 archive also uses an ad hoc signature.
+- **Local signing.** The build script uses an ad hoc signature by default. For more stable trust across rebuilds, use `CODESIGN_IDENTITY="your certificate name" ./scripts/build.sh`. Rebuilding, moving the app, or changing its signature may require granting permission again. The script does not automatically perform Developer ID signing or notarization. The downloadable 1.2.2 archive also uses an ad hoc signature.
 - **One running copy.** A second process with the same bundle ID exits so that one gesture does not switch layouts twice.
 
 ## Development and verification
@@ -147,7 +149,7 @@ For a shortcut that never switches the layout, check all categories:
 /usr/bin/log show --last 10m --style compact --predicate 'subsystem == "local.masos.LayoutSwitch"'
 ```
 
-The `Shortcut` category records recognition, cancellation, and selection outcomes. Cancellation reasons are `otherKey` for an unrelated key or auto-repeat during the shortcut, or an earlier action such as an arrow key or Ctrl shortcut; `extraModifier` for an additional modifier; `pointerAction` for a mouse button; `otherAction` for actions such as scrolling; `unexpectedKeyRelease` for a release with no observed press; and `heldAtReset` for keys or buttons held when monitoring starts or resets. A recognized shortcut cancelled by a monitoring state change is logged separately.
+The `Shortcut` category records recognition, cancellation, and selection outcomes. Cancellation reasons are `otherKey` for an unrelated key or auto-repeat during the shortcut (except repeats of an already-held ⌫), or an earlier action such as an arrow key or Ctrl shortcut; `extraModifier` for an additional modifier; `pointerAction` for a mouse button; `otherAction` for actions such as scrolling; `unexpectedKeyRelease` for a release with no observed press; and `heldAtReset` for keys or buttons held when monitoring starts or resets. A recognized shortcut cancelled by a monitoring state change is logged separately.
 
 The result is `confirmed` when the source read after selection matches the target, `unconfirmed` when the system call succeeded but the current source does not yet match, `failed` for a system error, or `unavailable` when no next source is available. `unconfirmed` alone does not prove failure: the source may change later. Ordinary typing does not generate shortcut entries.
 
@@ -188,6 +190,8 @@ The app does not extract typed text from keyboard events or send data over the n
 8. Switch several times quickly, then repeat after switching with the macOS shortcut and while LayoutSwitch's menu is open. Check the `SwitchLatency` log if a switch feels slow.
 9. If a switch is missed entirely, check `Shortcut` and `Monitoring`. Retry after releasing all keys and stopping scrolling, then compare with switching during fast typing.
 10. Hold the last typed letter while pressing and releasing Ctrl + Shift: expect one switch, regardless of whether the letter or modifiers are released first. Repeat with a capital letter typed with Shift. A new letter or arrow pressed after Ctrl must still cancel switching.
+11. Switch with Ctrl + Shift, release Ctrl but keep Shift held, type and release a letter, then press and release Ctrl again: both shortcuts should switch layouts. Repeat with Alt + Shift. Also hold a letter from preceding typing, cancel a shortcut with an arrow key, release the arrow and all modifiers, then retry the shortcut while still holding the preceding letter: the new attempt should work.
+12. Hold Delete (⌫) until it repeats, press Ctrl, then Shift, and release either shortcut key: expect one switch even if Delete is still repeating. Repeat with Alt + Shift. Pressing Ctrl or Alt first and only then starting Delete must still prevent switching.
 
 Automated tests cover logic without generating global events. Permissions, hardware event delivery, IME behavior, and login need to be verified on the Mac where the app will run.
 

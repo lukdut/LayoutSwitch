@@ -75,11 +75,81 @@ struct TypingOverlapTests {
                          flags([]), up(0, []), flags(chord), flags([])]) == [6])
     }
 
+    @Test func shiftTypingBetweenSwitchesCanKeepThePreviousLetterHeld() {
+        let alternative = Shortcut(modifiers: [.option, .shift])
+        for shortcuts in [[Shortcut.default], [alternative], [.default, alternative]] {
+            for first in shortcuts {
+                for next in shortcuts {
+                    for key: UInt16 in [0, 49, 51] {
+                        #expect(switches([flags(first.modifiers), flags(.shift), down(key, .shift),
+                                         flags(next.modifiers), flags(.shift), up(key, .shift), flags([])],
+                                        shortcuts: shortcuts) == [1, 4])
+                    }
+                }
+            }
+        }
+    }
+
+    @Test func cancelledGestureDoesNotCarryEarlierTypingIntoTheNextAttempt() {
+        for shortcut in [Shortcut.default, Shortcut(modifiers: [.option, .shift])] {
+            let mods = shortcut.modifiers
+            let conflicts: [[ShortcutEvent]] = [
+                [down(0, mods, repeat: true)],
+                [down(1, mods), up(1, mods)],
+                [flags(mods.union(.command)), flags(mods)],
+                [.init(.pointerDown(0), modifiers: mods), .init(.pointerUp(0), modifiers: mods)],
+                [.init(.otherAction, modifiers: mods)],
+                [up(1, mods)]
+            ]
+            for conflict in conflicts {
+                let events = [down(0, []), flags(mods)] + conflict +
+                    [flags([]), flags(mods), flags(.shift), flags([]), up(0, [])]
+                #expect(switches(events, shortcuts: [shortcut]) == [events.count - 3])
+            }
+        }
+    }
+
+    @Test func cancelledGestureStillRequiresItsModifiersAndConflictingKeysToBeReleased() {
+        // Keeping Shift after a failed attempt must not turn it into plain typing.
+        #expect(switches([down(0, []), flags(chord), down(1, chord), up(1, chord),
+                         flags(.shift), flags(chord), flags(.shift), flags([]),
+                         flags(chord), flags([]), up(0, [])]) == [9])
+        // A new key from the failed attempt must be released, unlike preceding typing.
+        #expect(switches([down(0, []), flags(chord), down(1, chord), flags([]),
+                         flags(chord), flags([]), up(1, []),
+                         flags(chord), flags([]), up(0, [])]) == [8])
+        #expect(switches([down(0, []), flags(chord), .init(.pointerDown(0), modifiers: chord),
+                         flags([]), flags(chord), flags([]), .init(.pointerUp(0), modifiers: []),
+                         flags(chord), flags([]), up(0, [])]) == [8])
+    }
+
+    @Test func cancellationIsReportedBeforeReturningToTyping() {
+        var recognizer = ShortcutRecognizer(shortcut: .default)
+        for event in [down(0, []), flags(chord), down(1, chord), up(1, chord)] {
+            #expect(recognizer.handle(event) == false)
+        }
+        #expect(recognizer.handle(flags([])) == false)
+        #expect(recognizer.lastCancellationReason == .otherKey)
+        #expect(recognizer.handle(flags(chord)) == false)
+        #expect(recognizer.lastCancellationReason == nil)
+        #expect(recognizer.handle(flags([])) == true)
+        #expect(recognizer.lastCancellationReason == nil)
+        #expect(recognizer.handle(up(0, [])) == false)
+        #expect(recognizer.lastCancellationReason == nil)
+    }
+
+    @Test func releasedEarlierModifierDoesNotBlockTypingOverlap() {
+        #expect(switches([down(0, []), flags(.command), flags([]),
+                         flags(chord), up(0, chord), flags([])]) == [5])
+        // An extra modifier overlapping the new chord still cancels that attempt.
+        #expect(switches([down(0, []), flags(.command), flags(chord.union(.command)),
+                         flags(chord), flags([]), flags(chord), flags([]), up(0, [])]) == [6])
+    }
+
     @Test func unrelatedActionsDuringTypingStillBlockTheGesture() {
         let conflicts: [[ShortcutEvent]] = [
             [.init(.pointerDown(0), modifiers: []), .init(.pointerUp(0), modifiers: [])],
             [.init(.otherAction, modifiers: [])],
-            [flags(.command), flags([])],
             [up(1, [])]
         ]
         for conflict in conflicts {
@@ -102,6 +172,10 @@ struct TypingOverlapTests {
                          up(49, .shift), flags([])], shortcuts: [shiftSpace]) == [4])
         #expect(switches([flags(.shift), down(0, .shift), up(0, .shift), down(49, .shift),
                          up(49, .shift), flags([])], shortcuts: [shiftSpace]) == [])
+        #expect(switches([flags(.shift), down(49, .shift), up(49, .shift),
+                         down(0, .shift), up(0, .shift), down(49, .shift), up(49, .shift),
+                         flags([]), flags(.shift), down(49, .shift), up(49, .shift), flags([])],
+                        shortcuts: [shiftSpace]) == [2, 10])
     }
 
     @Test func largerShortcutWithEarlierTypingStillSwitchesOnlyOnce() {

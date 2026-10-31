@@ -41,9 +41,15 @@ struct ShortcutRecognizerTests {
         #expect(switches([flags(chord), down(0, chord), flags([]), up(0, [])]) == [])
     }
 
-    @Test func testKeyAfterSwitchBlocksFurtherSwitchesUntilAllKeysAreReleased() {
+    @Test func testShiftTypingAfterSwitchAllowsTheNextShortcut() {
         #expect(switches([flags(chord), flags(.shift), down(0, .shift), up(0, .shift),
                          flags(chord), flags(.shift), flags([]),
+                         flags(chord), flags(.control), flags([])]) == [1, 5, 8])
+    }
+
+    @Test func testControlKeyActionAfterSwitchStillBlocksUntilReleased() {
+        #expect(switches([flags(chord), flags(.control), down(0, .control), up(0, .control),
+                         flags(chord), flags(.control), flags([]),
                          flags(chord), flags(.control), flags([])]) == [1, 8])
     }
 
